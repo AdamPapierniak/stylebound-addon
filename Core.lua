@@ -26,7 +26,7 @@ function StyleBound:CreateMinimapButton()
 
     local launcher = LDB:NewDataObject("StyleBound", {
         type  = "launcher",
-        icon  = "Interface\\AddOns\\stylebound-addon\\icon.tga",
+        icon  = "Interface\\AddOns\\StyleBound\\icon.tga",
         label = "StyleBound",
         OnClick = function(_, button)
             if button == "RightButton" then
