@@ -1,0 +1,30 @@
+## Interface: 120001
+## Title: StyleBound
+## Notes: Export and import transmog outfits with StyleBound.gg
+## Author: StyleBound
+## Version: @project-version@
+## IconTexture: Interface\AddOns\stylebound-addon\icon.tga
+## SavedVariables: StyleBoundDB
+## SavedVariablesPerCharacter: StyleBoundCharDB
+## X-Curse-Project-ID: 1515445
+## X-WoWI-ID:
+## X-License: MIT
+## X-Website: https://stylebound.gg
+## Category: Transmogrification
+
+embeds.xml
+
+Data\SlotConstants.lua
+
+DB.lua
+Core.lua
+
+Export.lua
+Import.lua
+OutfitLibrary.lua
+Screenshot.lua
+Selfie.lua
+
+UI\MainPanel.lua
+UI\ImportDialog.lua
+UI\OutfitBrowser.lua

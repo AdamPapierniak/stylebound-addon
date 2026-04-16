@@ -1,0 +1,6 @@
+package-as: StyleBound
+enable-nolib-creation: no
+ignore:
+  - .github
+  - .pkgmeta
+  - CHANGELOG.md
