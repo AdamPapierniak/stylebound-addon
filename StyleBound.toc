@@ -3,7 +3,7 @@
 ## Notes: Export and import transmog outfits with StyleBound.gg
 ## Author: StyleBound
 ## Version: @project-version@
-## IconTexture: Interface\AddOns\stylebound-addon\icon.tga
+## IconTexture: Interface\AddOns\StyleBound\icon.tga
 ## SavedVariables: StyleBoundDB
 ## SavedVariablesPerCharacter: StyleBoundCharDB
 ## X-Curse-Project-ID: 1515445
