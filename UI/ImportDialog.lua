@@ -6,6 +6,7 @@ local _, StyleBound = ...
 local ImportDialog = StyleBound:NewModule("ImportDialog")
 
 local AceGUI = LibStub("AceGUI-3.0")
+local UI = StyleBound.UI
 
 local frame = nil  -- singleton
 
@@ -13,14 +14,24 @@ local frame = nil  -- singleton
 -- Frame helpers: position persistence + full-border dragging
 -------------------------------------------------------------------------------
 
-local function ConfigureFrame(aceFrame, positionKey)
+local function ConfigureFrame(aceFrame, positionKey, minWidth, minHeight)
+    UI:ApplyFrame(aceFrame)
+
     -- Position persistence via AceGUI SetStatusTable
     if StyleBound.db and StyleBound.db.global.framePositions then
         aceFrame:SetStatusTable(StyleBound.db.global.framePositions[positionKey])
     end
+    UI:EnforceMinimumFrame(aceFrame, minWidth, minHeight)
 
     -- Enable dragging from anywhere on the frame (not just title bar)
     local rawFrame = aceFrame.frame
+    if minWidth and minHeight then
+        if rawFrame.SetResizeBounds then
+            rawFrame:SetResizeBounds(minWidth, minHeight)
+        elseif rawFrame.SetMinResize then
+            rawFrame:SetMinResize(minWidth, minHeight)
+        end
+    end
     rawFrame:SetMovable(true)
     rawFrame:EnableMouse(true)
     rawFrame:RegisterForDrag("LeftButton")
@@ -90,10 +101,7 @@ local function BuildSlotGrid(container, outfit, collected)
     for _, slotKey in ipairs(StyleBound.SLOTS) do
         local slotData = outfit.slots[slotKey]
         if slotData then
-            local row = AceGUI:Create("SimpleGroup")
-            row:SetFullWidth(true)
-            row:SetLayout("Flow")
-            scrollFrame:AddChild(row)
+            local row = UI:CreateRow(scrollFrame, collected[slotKey] == false and "gold" or "subtle", "Flow")
 
             -- Icon
             local icon = AceGUI:Create("Icon")
@@ -114,6 +122,8 @@ local function BuildSlotGrid(container, outfit, collected)
                 label:SetText(displayName .. ": Loading...")
             end
             label:SetWidth(350)
+            label:SetFontObject(GameFontHighlight)
+            UI:SetLabelColor(label, UI.Colors.text)
             row:AddChild(label)
 
             -- Async item name resolution
@@ -151,8 +161,9 @@ local function BuildSlotGrid(container, outfit, collected)
         for _, key in ipairs(outfit.hidden) do
             names[#names + 1] = SLOT_DISPLAY_NAMES[key] or key
         end
-        hiddenLabel:SetText("\n|cFF888888Hidden: " .. table.concat(names, ", ") .. "|r")
+        hiddenLabel:SetText("Hidden: " .. table.concat(names, ", "))
         hiddenLabel:SetFullWidth(true)
+        UI:SetLabelColor(hiddenLabel, UI.Colors.muted)
         scrollFrame:AddChild(hiddenLabel)
     end
 end
@@ -161,124 +172,67 @@ end
 -- Preview in Dressing Room
 -------------------------------------------------------------------------------
 
---- Resolve a transmog source ID for DressUpVisual: prefer explicit `s`, else derive from item `i`.
-local function GetDressUpSourceID(slotData)
-    if slotData.s and slotData.s > 0 then
-        return slotData.s
-    end
-    if slotData.i and slotData.i > 0 then
-        local itemLink = select(2, GetItemInfo(slotData.i))
-        if itemLink then
-            local ok, _, sourceID = pcall(C_TransmogCollection.GetItemInfo, itemLink)
-            if ok and sourceID and sourceID > 0 then
-                return sourceID
-            end
-        end
-    end
-    return nil
-end
-
 local function PreviewInDressingRoom(outfit)
-    DressUpFrame_Show(DressUpFrame)
-
-    -- Reset the model
-    if DressUpFrame.ModelScene then
-        local actor = DressUpFrame.ModelScene:GetPlayerActor()
-        if actor then
-            actor:Undress()
-        end
-    end
-
-    -- Dress each slot
-    for _, slotKey in ipairs(StyleBound.SLOTS) do
-        local slotData = outfit.slots[slotKey]
-        if slotData then
-            local sourceID = GetDressUpSourceID(slotData)
-            if sourceID then
-                DressUpVisual(sourceID)
-            end
-        end
-    end
+    StyleBound:PreviewOutfitInDressingRoom(outfit)
 end
 
--------------------------------------------------------------------------------
--- Save to Library (with name prompt)
--------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- Save to Library
+------------------------------------------------------------------------------
 
-local function PromptSaveToLibrary(outfit)
+local function GetDefaultOutfitName(outfit)
     local defaultName = "Imported outfit"
     if outfit.char and outfit.char.name then
         defaultName = outfit.char.name .. " outfit"
     end
+    return defaultName
+end
 
-    local saveFrame = AceGUI:Create("Frame")
-    saveFrame:SetTitle("Save to Library")
-    saveFrame:SetWidth(350)
-    saveFrame:SetHeight(150)
-    saveFrame:SetLayout("List")
-    ConfigureFrame(saveFrame, "savePrompt")
-    saveFrame:SetCallback("OnClose", function(widget)
-        AceGUI:Release(widget)
-    end)
+local function NormalizeOutfitName(name, fallback)
+    name = name or ""
+    name = name:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then name = fallback end
+    if #name > 64 then name = name:sub(1, 64) end
+    return name
+end
 
-    local nameBox = AceGUI:Create("EditBox")
-    nameBox:SetLabel("Outfit Name:")
-    nameBox:SetFullWidth(true)
-    nameBox:SetText(defaultName)
-    saveFrame:AddChild(nameBox)
+local function SaveToLibrary(outfit, name)
+    local defaultName = GetDefaultOutfitName(outfit)
+    local normalizedName = NormalizeOutfitName(name, defaultName)
+    outfit.source = outfit.source or "import"
 
-    local saveBtn = AceGUI:Create("Button")
-    saveBtn:SetText("Save")
-    saveBtn:SetFullWidth(true)
-    saveBtn:SetCallback("OnClick", function()
-        local name = nameBox:GetText()
-        if name == "" then name = defaultName end
-        if #name > 64 then name = name:sub(1, 64) end
+    local OutfitLibrary = StyleBound:GetModule("OutfitLibrary")
+    local id = OutfitLibrary:Save(outfit, normalizedName)
 
-        outfit.source = "import"
-        local OutfitLibrary = StyleBound:GetModule("OutfitLibrary")
-        OutfitLibrary:Save(outfit, name)
-
-        StyleBound:Print("Outfit saved: " .. name)
-        AceGUI:Release(saveFrame)
-    end)
-    saveFrame:AddChild(saveBtn)
-
-    C_Timer.After(0.05, function()
-        nameBox:SetFocus()
-        nameBox:HighlightText()
-    end)
+    StyleBound:Print("Outfit saved: " .. normalizedName)
+    return id, normalizedName
 end
 
 -------------------------------------------------------------------------------
 -- Main dialog states
 -------------------------------------------------------------------------------
 
+local ShowResultState
+
 local function ShowInputState(container)
     container:ReleaseChildren()
     container:SetLayout("List")
 
-    local desc = AceGUI:Create("Label")
-    desc:SetText("Paste a StyleBound export string below to preview and import a transmog outfit.")
-    desc:SetFullWidth(true)
-    container:AddChild(desc)
-
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
+    local panel = UI:CreatePanel(container, "gold")
+    UI:AddText(panel, "Paste an outfit string to inspect its slots, collection status, and dressing-room preview.", UI.Colors.muted)
+    UI:AddDivider(panel)
 
     local editBox = AceGUI:Create("MultiLineEditBox")
     editBox:SetLabel("Export String:")
     editBox:SetFullWidth(true)
     editBox:SetNumLines(6)
     editBox:DisableButton(true)
-    container:AddChild(editBox)
+    panel:AddChild(editBox)
 
     local errorLabel = AceGUI:Create("Label")
     errorLabel:SetText("")
     errorLabel:SetFullWidth(true)
-    container:AddChild(errorLabel)
+    panel:AddChild(errorLabel)
 
     local decodeBtn = AceGUI:Create("Button")
     decodeBtn:SetText("Decode")
@@ -313,30 +267,45 @@ local function ShowInputState(container)
         local collected = Import:ResolveCollection(outfit)
 
         -- Show result state
-        ShowResultState(container, outfit, collected)
+        ShowResultState(container, outfit, collected, {
+            back = function()
+                ShowInputState(container)
+            end,
+            closeOnSave = true,
+        })
     end)
-    container:AddChild(decodeBtn)
+    panel:AddChild(decodeBtn)
+    UI:AddSpacer(panel, 8)
 
     C_Timer.After(0.05, function()
         editBox:SetFocus()
     end)
 end
 
-function ShowResultState(container, outfit, collected)
+ShowResultState = function(container, outfit, collected, options)
+    options = options or {}
     container:ReleaseChildren()
     container:SetLayout("List")
+
+    local summaryPanel = UI:CreatePanel(container, "gold")
 
     -- Character info header
     if outfit.char then
         local c = outfit.char
         local charText = (c.name or "Unknown") .. "-" .. (c.realm or "Unknown")
-        if c.race and c.class then
-            charText = charText .. "  (" .. c.race .. " " .. c.class .. ")"
+        local parts = {}
+        if c.race then parts[#parts + 1] = c.race end
+        if c.class then parts[#parts + 1] = c.class end
+        if c.sex then parts[#parts + 1] = c.sex end
+        if c.faction then parts[#parts + 1] = c.faction end
+        if #parts > 0 then
+            charText = charText .. "  (" .. table.concat(parts, " ") .. ")"
         end
         local charLabel = AceGUI:Create("Label")
         charLabel:SetText("|cFFFFD100" .. charText .. "|r")
         charLabel:SetFullWidth(true)
-        container:AddChild(charLabel)
+        charLabel:SetFontObject(GameFontNormalLarge)
+        summaryPanel:AddChild(charLabel)
     end
 
     -- Slot count + collection summary
@@ -356,28 +325,41 @@ function ShowResultState(container, outfit, collected)
     local summaryLabel = AceGUI:Create("Label")
     summaryLabel:SetText(summaryText)
     summaryLabel:SetFullWidth(true)
-    container:AddChild(summaryLabel)
-
-    -- Spacer
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
+    summaryLabel:SetFontObject(GameFontHighlight)
+    UI:SetLabelColor(summaryLabel, UI.Colors.text)
+    summaryPanel:AddChild(summaryLabel)
+    UI:AddDivider(summaryPanel)
+    UI:AddSpacer(summaryPanel, 8)
 
     -- Slot grid (scrollable)
     local gridGroup = AceGUI:Create("SimpleGroup")
     gridGroup:SetFullWidth(true)
-    gridGroup:SetHeight(220)
+    gridGroup:SetHeight(280)
     gridGroup:SetLayout("Fill")
+    UI:StylePanel(gridGroup, "subtle")
     container:AddChild(gridGroup)
 
     BuildSlotGrid(gridGroup, outfit, collected)
 
-    -- Action buttons
+    -- Save + action buttons
+    local actionPanel = UI:CreatePanel(container, "subtle")
+
+    local nameBox = AceGUI:Create("EditBox")
+    nameBox:SetLabel("Outfit Name:")
+    nameBox:SetWidth(420)
+    nameBox:SetText(GetDefaultOutfitName(outfit))
+    actionPanel:AddChild(nameBox)
+
+    local saveStatus = AceGUI:Create("Label")
+    saveStatus:SetText("")
+    saveStatus:SetFullWidth(true)
+    UI:SetLabelColor(saveStatus, UI.Colors.green)
+    actionPanel:AddChild(saveStatus)
+
     local btnGroup = AceGUI:Create("SimpleGroup")
     btnGroup:SetFullWidth(true)
     btnGroup:SetLayout("Flow")
-    container:AddChild(btnGroup)
+    actionPanel:AddChild(btnGroup)
 
     local previewBtn = AceGUI:Create("Button")
     previewBtn:SetText("Preview in Dressing Room")
@@ -391,7 +373,23 @@ function ShowResultState(container, outfit, collected)
     saveBtn:SetText("Save to Library")
     saveBtn:SetWidth(150)
     saveBtn:SetCallback("OnClick", function()
-        PromptSaveToLibrary(outfit)
+        local _, savedName = SaveToLibrary(outfit, nameBox:GetText())
+        saveStatus:SetText("Saved: " .. savedName)
+        saveBtn:SetText("Saved")
+        saveBtn:SetDisabled(true)
+        if nameBox.SetDisabled then
+            nameBox:SetDisabled(true)
+        end
+        if options.afterSave then
+            options.afterSave(savedName)
+        end
+        if options.closeOnSave and frame then
+            C_Timer.After(0.15, function()
+                if frame then
+                    frame:Hide()
+                end
+            end)
+        end
     end)
     btnGroup:AddChild(saveBtn)
 
@@ -400,7 +398,11 @@ function ShowResultState(container, outfit, collected)
     backBtn:SetText("Back")
     backBtn:SetWidth(80)
     backBtn:SetCallback("OnClick", function()
-        ShowInputState(container)
+        if options.back then
+            options.back()
+        else
+            ShowInputState(container)
+        end
     end)
     btnGroup:AddChild(backBtn)
 end
@@ -414,10 +416,10 @@ function ImportDialog:Show()
 
     frame = AceGUI:Create("Frame")
     frame:SetTitle("StyleBound — Import Outfit")
-    frame:SetWidth(480)
-    frame:SetHeight(500)
+    frame:SetWidth(640)
+    frame:SetHeight(560)
     frame:SetLayout("Fill")
-    ConfigureFrame(frame, "importDialog")
+    ConfigureFrame(frame, "importDialog", 640, 560)
     frame:SetCallback("OnClose", function(widget)
         AceGUI:Release(widget)
         frame = nil
@@ -439,10 +441,10 @@ function ImportDialog:ShowResult(outfit, collected)
 
     frame = AceGUI:Create("Frame")
     frame:SetTitle("StyleBound — Import Preview")
-    frame:SetWidth(480)
-    frame:SetHeight(500)
+    frame:SetWidth(640)
+    frame:SetHeight(560)
     frame:SetLayout("Fill")
-    ConfigureFrame(frame, "importDialog")
+    ConfigureFrame(frame, "importDialog", 640, 560)
     frame:SetCallback("OnClose", function(widget)
         AceGUI:Release(widget)
         frame = nil
@@ -454,7 +456,13 @@ function ImportDialog:ShowResult(outfit, collected)
     content:SetLayout("List")
     frame:AddChild(content)
 
-    ShowResultState(content, outfit, collected)
+    ShowResultState(content, outfit, collected, {
+        closeOnSave = true,
+    })
+end
+
+function ImportDialog:RenderResult(container, outfit, collected, options)
+    ShowResultState(container, outfit, collected, options)
 end
 
 function ImportDialog:Hide()

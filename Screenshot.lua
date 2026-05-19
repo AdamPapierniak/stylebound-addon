@@ -9,6 +9,37 @@ local TakeScreenshot = _G.Screenshot
 
 local ScreenshotModule = StyleBound:NewModule("Screenshot", "AceEvent-3.0")
 
+local function IsDebugLogging()
+    return StyleBound.db
+        and StyleBound.db.global
+        and StyleBound.db.global.settings
+        and StyleBound.db.global.settings.debugMode
+end
+
+local function DebugPrint(message)
+    if IsDebugLogging() then
+        StyleBound:Print(message)
+    end
+end
+
+local function PrintDebugHandoff(title, shots, outfitSnapshot)
+    if not IsDebugLogging() then
+        return
+    end
+
+    local Export = StyleBound:GetModule("Export")
+    local encoded = Export:EncodeOutfit(outfitSnapshot)
+
+    StyleBound:Print("--- " .. title .. " Details ---")
+    for i, shot in ipairs(shots) do
+        local label = shot.label and (shot.label .. ": ") or ""
+        StyleBound:Print("  " .. i .. ". " .. label .. shot.filename)
+    end
+    StyleBound:Print("--- Export String ---")
+    StyleBound:Print(encoded)
+    StyleBound:Print("Screenshots folder: [World of Warcraft\\_retail_\\Screenshots]")
+end
+
 -------------------------------------------------------------------------------
 -- UI Hide / Restore
 -------------------------------------------------------------------------------
@@ -278,17 +309,8 @@ function ScreenshotModule:EndSession()
 
     -- Export handoff
     if #session.shots > 0 then
-        local Export = StyleBound:GetModule("Export")
-        local encoded = Export:EncodeOutfit(session.outfitSnapshot)
-
-        StyleBound:Print("--- Screenshot Session Complete ---")
-        StyleBound:Print(#session.shots .. " shot(s) captured:")
-        for i, shot in ipairs(session.shots) do
-            StyleBound:Print("  " .. i .. ". " .. shot.filename)
-        end
-        StyleBound:Print("--- Export String ---")
-        StyleBound:Print(encoded)
-        StyleBound:Print("Screenshots folder: [World of Warcraft\\_retail_\\Screenshots]")
+        StyleBound:Print("Screenshot session complete: " .. #session.shots .. " shot(s) saved.")
+        PrintDebugHandoff("Screenshot Session", session.shots, session.outfitSnapshot)
     else
         StyleBound:Print("No shots taken. Session ended.")
     end
@@ -331,9 +353,17 @@ end
 -------------------------------------------------------------------------------
 
 local AUTO_SHOTS = {
-    { label = "Front",         yaw = 180, zoom = 4 },
+    { label = "Full Body",     yaw = 180, zoom = 5.2 },
     { label = "Three-Quarter", yaw = 150, zoom = 3 },
     { label = "Close-Up",      yaw = 180, zoom = 2 },
+}
+
+local AUTO_PITCH_ADJUST = {
+    -- A small downward view nudge levels the camera after SetView(2)'s high angle.
+    enabled = true,
+    direction = "down",
+    speed = 0.18,
+    duration = 0.14,
 }
 
 local autoShootState = nil
@@ -345,6 +375,86 @@ local function ZoomToDistance(targetDist)
         CameraZoomOut(diff)
     elseif diff < 0 then
         CameraZoomIn(-diff)
+    end
+end
+
+local function StopCameraMotion()
+    if MoveViewUpStop then
+        MoveViewUpStop()
+    elseif MoveViewUpStart then
+        MoveViewUpStart(0)
+    end
+
+    if MoveViewDownStop then
+        MoveViewDownStop()
+    elseif MoveViewDownStart then
+        MoveViewDownStart(0)
+    end
+
+    if MoveViewLeftStop then
+        MoveViewLeftStop()
+    elseif MoveViewLeftStart then
+        MoveViewLeftStart(0)
+    end
+
+    if MoveViewRightStop then
+        MoveViewRightStop()
+    elseif MoveViewRightStart then
+        MoveViewRightStart(0)
+    end
+
+    if MoveViewInStop then
+        MoveViewInStop()
+    elseif MoveViewInStart then
+        MoveViewInStart(0)
+    end
+
+    if MoveViewOutStop then
+        MoveViewOutStop()
+    elseif MoveViewOutStart then
+        MoveViewOutStart(0)
+    end
+end
+
+local function NudgeAutoShootPitch(callback)
+    if not AUTO_PITCH_ADJUST.enabled or AUTO_PITCH_ADJUST.duration <= 0 then
+        if callback then callback() end
+        return
+    end
+
+    local startPitch = AUTO_PITCH_ADJUST.direction == "down" and MoveViewDownStart or MoveViewUpStart
+    if not startPitch then
+        if callback then callback() end
+        return
+    end
+
+    startPitch(AUTO_PITCH_ADJUST.speed)
+    C_Timer.After(AUTO_PITCH_ADJUST.duration, function()
+        StopCameraMotion()
+        if callback then callback() end
+    end)
+end
+
+local function RestoreAutoShootCamera()
+    StopCameraMotion()
+
+    -- Unwind the yaw first so movement/camera controls do not stay front-facing.
+    if autoShootState and autoShootState.currentYaw ~= 0 then
+        FlipCameraYaw(-autoShootState.currentYaw)
+        autoShootState.currentYaw = 0
+    end
+
+    if SetView then
+        SetView(5)
+        C_Timer.After(0.05, function()
+            StopCameraMotion()
+            SetView(5)
+        end)
+        return
+    end
+
+    if autoShootState and autoShootState.originalZoom then
+        ZoomToDistance(autoShootState.originalZoom)
     end
 end
 
@@ -393,7 +503,7 @@ function ScreenshotModule:StartAutoShoot()
         originalZoom = GetCameraZoom(),
     }
 
-    StyleBound:Print("Auto-shoot starting — 3 shots from different angles...")
+    StyleBound:Print("Auto-shoot starting: " .. #AUTO_SHOTS .. " shots.")
 
     -- Reset camera to a known baseline: directly behind the character
     -- SetView(2) is WoW's built-in "behind character" preset
@@ -402,7 +512,10 @@ function ScreenshotModule:StartAutoShoot()
     -- Wait for the camera to settle into the baseline position, then start
     C_Timer.After(1.5, function()
         if not session.active then return end
-        self:AutoShootNext()
+        NudgeAutoShootPitch(function()
+            if not session.active then return end
+            self:AutoShootNext()
+        end)
     end)
 end
 
@@ -435,7 +548,7 @@ function ScreenshotModule:AutoShootNext()
         if not session.active then return end
 
         pendingFilename = ReconstructFilename()
-        StyleBound:Print("  Taking shot " .. state.shotIndex .. "/" .. #AUTO_SHOTS .. ": " .. shot.label)
+        DebugPrint("Taking shot " .. state.shotIndex .. "/" .. #AUTO_SHOTS .. ": " .. shot.label)
 
         C_Timer.After(0.2, function()
             if not session.active then return end
@@ -469,7 +582,7 @@ function ScreenshotModule:OnAutoShootFailed()
     if not session or not session.active or session.mode ~= "autoshoot" then return end
 
     pendingFilename = nil
-    StyleBound:Print("  Shot failed, skipping...")
+    StyleBound:Print("Shot failed, skipping.")
 
     -- Continue to next shot
     C_Timer.After(0.3, function()
@@ -485,15 +598,8 @@ function ScreenshotModule:FinishAutoShoot()
     self:UnregisterEvent("SCREENSHOT_SUCCEEDED")
     self:UnregisterEvent("SCREENSHOT_FAILED")
 
-    -- Undo accumulated yaw so camera faces original direction
-    if autoShootState and autoShootState.currentYaw ~= 0 then
-        FlipCameraYaw(-autoShootState.currentYaw)
-    end
-
-    -- Restore original zoom
-    if autoShootState and autoShootState.originalZoom then
-        ZoomToDistance(autoShootState.originalZoom)
-    end
+    -- Restore original yaw, pitch, and zoom.
+    RestoreAutoShootCamera()
 
     -- Restore names and UI
     RestoreNames(session)
@@ -511,16 +617,8 @@ function ScreenshotModule:FinishAutoShoot()
 
     -- Export handoff
     if #session.shots > 0 then
-        local Export = StyleBound:GetModule("Export")
-        local encoded = Export:EncodeOutfit(session.outfitSnapshot)
-
-        StyleBound:Print("--- Auto-Shoot Complete ---")
-        for i, shot in ipairs(session.shots) do
-            StyleBound:Print("  " .. i .. ". " .. shot.label .. ": " .. shot.filename)
-        end
-        StyleBound:Print("--- Export String ---")
-        StyleBound:Print(encoded)
-        StyleBound:Print("Screenshots folder: [World of Warcraft\\_retail_\\Screenshots]")
+        StyleBound:Print("Auto-shoot complete: " .. #session.shots .. " screenshot(s) saved.")
+        PrintDebugHandoff("Auto-Shoot", session.shots, session.outfitSnapshot)
     else
         StyleBound:Print("Auto-shoot complete but no shots captured.")
     end

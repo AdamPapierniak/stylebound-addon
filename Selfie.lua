@@ -7,6 +7,37 @@ local _, StyleBound = ...
 
 local SelfieModule = StyleBound:NewModule("Selfie", "AceEvent-3.0")
 
+local function IsDebugLogging()
+    return StyleBound.db
+        and StyleBound.db.global
+        and StyleBound.db.global.settings
+        and StyleBound.db.global.settings.debugMode
+end
+
+local function IsSelfieInterceptEnabled()
+    return StyleBound.db
+        and StyleBound.db.global
+        and StyleBound.db.global.settings
+        and StyleBound.db.global.settings.interceptSelfieCamera ~= false
+end
+
+local function PrintDebugHandoff(shots, outfitSnapshot)
+    if not IsDebugLogging() then
+        return
+    end
+
+    local Export = StyleBound:GetModule("Export")
+    local encoded = Export:EncodeOutfit(outfitSnapshot)
+
+    StyleBound:Print("--- Selfie Session Details ---")
+    for i, shot in ipairs(shots) do
+        StyleBound:Print("  " .. i .. ". " .. shot.filename)
+    end
+    StyleBound:Print("--- Export String ---")
+    StyleBound:Print(encoded)
+    StyleBound:Print("Screenshots folder: [World of Warcraft\\_retail_\\Screenshots]")
+end
+
 -------------------------------------------------------------------------------
 -- Constants
 -------------------------------------------------------------------------------
@@ -161,6 +192,10 @@ end
 -------------------------------------------------------------------------------
 
 function SelfieModule:StartSession()
+    if not IsSelfieInterceptEnabled() then
+        return
+    end
+
     if StyleBound.session and StyleBound.session.active then
         StyleBound:Print("A session is already active.")
         return
@@ -210,17 +245,8 @@ function SelfieModule:EndSession()
 
     -- Export handoff
     if #session.shots > 0 then
-        local Export = StyleBound:GetModule("Export")
-        local encoded = Export:EncodeOutfit(session.outfitSnapshot)
-
-        StyleBound:Print("--- Selfie Session Complete ---")
-        StyleBound:Print(#session.shots .. " shot(s) captured:")
-        for i, shot in ipairs(session.shots) do
-            StyleBound:Print("  " .. i .. ". " .. shot.filename)
-        end
-        StyleBound:Print("--- Export String ---")
-        StyleBound:Print(encoded)
-        StyleBound:Print("Screenshots folder: [World of Warcraft\\_retail_\\Screenshots]")
+        StyleBound:Print("Selfie session complete: " .. #session.shots .. " shot(s) saved.")
+        PrintDebugHandoff(session.shots, session.outfitSnapshot)
     else
         StyleBound:Print("Selfie session ended. No shots taken.")
     end
@@ -245,7 +271,9 @@ function SelfieModule:OnScreenshotSucceeded()
         takenAt  = time(),
     }
 
-    StyleBound:Print("StyleBound: shot #" .. #session.shots .. " captured")
+    if IsDebugLogging() then
+        StyleBound:Print("Selfie shot #" .. #session.shots .. " captured.")
+    end
 
     -- Reset watchdog
     self:StartWatchdog()
@@ -272,6 +300,14 @@ end
 function SelfieModule:OnUnitAura(_, unit)
     if unit ~= "player" then return end
 
+    if not IsSelfieInterceptEnabled() then
+        if wasBuffActive then
+            wasBuffActive = false
+            self:EndSession()
+        end
+        return
+    end
+
     local isBuffActive = HasSelfieBuff()
 
     if isBuffActive and not wasBuffActive then
@@ -283,6 +319,25 @@ function SelfieModule:OnUnitAura(_, unit)
         wasBuffActive = false
         self:EndSession()
     end
+end
+
+function SelfieModule:SetInterceptEnabled(enabled)
+    if not StyleBound.db or not StyleBound.db.global or not StyleBound.db.global.settings then
+        return
+    end
+
+    StyleBound.db.global.settings.interceptSelfieCamera = enabled and true or false
+
+    if enabled then
+        if HasSelfieBuff() and not wasBuffActive then
+            wasBuffActive = true
+            self:StartSession()
+        end
+        return
+    end
+
+    wasBuffActive = false
+    self:EndSession()
 end
 
 -------------------------------------------------------------------------------

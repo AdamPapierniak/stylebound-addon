@@ -5,6 +5,19 @@ local ADDON_NAME, StyleBound = ...
 
 StyleBound = LibStub("AceAddon-3.0"):NewAddon(StyleBound, ADDON_NAME, "AceConsole-3.0", "AceEvent-3.0")
 
+local DEBUG_COMMANDS = {
+    dbcheck = true,
+    selftest = true,
+    probe = true,
+    probe2 = true,
+    probe3 = true,
+    probe4 = true,
+    probe5 = true,
+    probe6 = true,
+    probe7 = true,
+    probe8 = true,
+}
+
 function StyleBound:OnInitialize()
     self:InitDB()
     self:RegisterChatCommand("stylebound", "SlashCommand")
@@ -13,7 +26,44 @@ function StyleBound:OnInitialize()
 end
 
 function StyleBound:OnEnable()
-    self:Print("StyleBound v0.1.0 loaded.")
+    if self.db.global.settings.chatNotifications ~= false then
+        self:Print("StyleBound " .. self:GetVersion() .. " loaded.")
+    end
+end
+
+function StyleBound:GetVersion()
+    local version
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        version = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version")
+    elseif GetAddOnMetadata then
+        version = GetAddOnMetadata(ADDON_NAME, "Version")
+    end
+    if not version or version == "" or version == "@project-version@" then
+        version = "dev"
+    end
+    return version
+end
+
+function StyleBound:IsDebugMode()
+    return self.db
+        and self.db.global
+        and self.db.global.settings
+        and self.db.global.settings.debugMode == true
+end
+
+local function NormalizeFaction(faction)
+    if not faction then return nil end
+    local normalized = faction:lower()
+    if normalized == "alliance" or normalized == "horde" or normalized == "neutral" then
+        return normalized
+    end
+    return nil
+end
+
+local function SexFromGender(gender)
+    if gender == 2 then return "male" end
+    if gender == 3 then return "female" end
+    return "unknown"
 end
 
 -------------------------------------------------------------------------------
@@ -26,19 +76,14 @@ function StyleBound:CreateMinimapButton()
 
     local launcher = LDB:NewDataObject("StyleBound", {
         type  = "launcher",
-        icon  = "Interface\\AddOns\\StyleBound\\icon.tga",
+        icon  = "Interface\\AddOns\\StyleBound\\Media\\stylebound-icon.tga",
         label = "StyleBound",
-        OnClick = function(_, button)
-            if button == "RightButton" then
-                StyleBound:Print("Settings panel coming soon.")
-            else
-                StyleBound:GetModule("MainPanel"):Toggle()
-            end
+        OnClick = function()
+            StyleBound:GetModule("MainPanel"):Toggle()
         end,
         OnTooltipShow = function(tooltip)
             tooltip:AddLine("StyleBound")
-            tooltip:AddLine("|cFFFFFFFFLeft-click:|r Toggle panel", 0.8, 0.8, 0.8)
-            tooltip:AddLine("|cFFFFFFFFRight-click:|r Settings", 0.8, 0.8, 0.8)
+            tooltip:AddLine("|cFFFFFFFFClick:|r Toggle panel", 0.8, 0.8, 0.8)
         end,
     })
 
@@ -54,6 +99,166 @@ function StyleBound:CreateMinimapButton()
     end
 end
 
+function StyleBound:SetMinimapButtonShown(shown)
+    if not self.db or not self.db.global or not self.db.global.settings then
+        return
+    end
+
+    self.db.global.settings.showMinimapButton = shown and true or false
+
+    local LDBIcon = LibStub("LibDBIcon-1.0", true)
+    if not LDBIcon then
+        return
+    end
+
+    if shown then
+        LDBIcon:Show("StyleBound")
+    else
+        LDBIcon:Hide("StyleBound")
+    end
+end
+
+function StyleBound:RaiseDressUpFrame()
+    if not DressUpFrame then return end
+
+    if DressUpFrame.SetToplevel then
+        DressUpFrame:SetToplevel(true)
+    end
+    if DressUpFrame.SetFrameStrata then
+        DressUpFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+    end
+    if DressUpFrame.SetFrameLevel then
+        DressUpFrame:SetFrameLevel(500)
+    end
+    if DressUpFrame.Raise then
+        DressUpFrame:Raise()
+    end
+end
+
+local function ResolveTransmogSourceID(id)
+    if not id or id <= 0 then
+        return nil
+    end
+
+    if C_TransmogCollection and C_TransmogCollection.GetSourceInfo then
+        local ok, source = pcall(C_TransmogCollection.GetSourceInfo, id)
+        if ok and source and source.sourceID and source.sourceID > 0 then
+            return source.sourceID
+        end
+    end
+
+    if C_TransmogCollection and C_TransmogCollection.GetAppearanceSources then
+        local ok, sources = pcall(C_TransmogCollection.GetAppearanceSources, id)
+        if ok and sources and sources[1] and sources[1].sourceID and sources[1].sourceID > 0 then
+            return sources[1].sourceID
+        end
+    end
+
+    return id
+end
+
+function StyleBound:GetDressUpSourceID(slotData)
+    if not slotData then
+        return nil
+    end
+    if slotData.s and slotData.s > 0 then
+        return ResolveTransmogSourceID(slotData.s)
+    end
+    if slotData.i and slotData.i > 0 then
+        local itemLink = select(2, GetItemInfo(slotData.i))
+        if itemLink and C_TransmogCollection and C_TransmogCollection.GetItemInfo then
+            local ok, _, sourceID = pcall(C_TransmogCollection.GetItemInfo, itemLink)
+            if ok and sourceID and sourceID > 0 then
+                return ResolveTransmogSourceID(sourceID)
+            end
+        end
+    end
+    return nil
+end
+
+function StyleBound:BuildItemTransmogInfoList(outfit)
+    if not outfit or not outfit.slots or not TransmogUtil or not TransmogUtil.GetEmptyItemTransmogInfoList then
+        return nil
+    end
+
+    local list = TransmogUtil.GetEmptyItemTransmogInfoList()
+    local mhData = outfit.slots.MAINHAND
+    local ohData = outfit.slots.OFFHAND
+    local mhSourceID = self:GetDressUpSourceID(mhData)
+    local ohSourceID = self:GetDressUpSourceID(ohData)
+
+    for _, slotKey in ipairs(self.SLOTS or {}) do
+        local slotData = outfit.slots[slotKey]
+        local invSlot = self.SLOT_TO_INVSLOT and self.SLOT_TO_INVSLOT[slotKey]
+        local itemTransmogInfo = invSlot and list[invSlot]
+        local sourceID = self:GetDressUpSourceID(slotData)
+
+        if sourceID and itemTransmogInfo and itemTransmogInfo.Init then
+            local secondarySourceID = 0
+            if slotKey == "MAINHAND" and ohSourceID and ohSourceID == sourceID then
+                secondarySourceID = ohSourceID
+            elseif slotKey == "OFFHAND" and mhSourceID and mhSourceID == sourceID then
+                sourceID = nil
+            elseif slotData and slotData.sa and slotData.sa > 0 then
+                secondarySourceID = ResolveTransmogSourceID(slotData.sa) or 0
+            end
+
+            if sourceID then
+                itemTransmogInfo:Init(sourceID, secondarySourceID, slotData.il or 0)
+            end
+        end
+    end
+
+    return list
+end
+
+function StyleBound:PreviewOutfitInDressingRoom(outfit)
+    if not outfit or not outfit.slots then
+        return false
+    end
+
+    if DressUpFrame_Show and DressUpFrame then
+        DressUpFrame_Show(DressUpFrame)
+    end
+    self:RaiseDressUpFrame()
+
+    local list = self:BuildItemTransmogInfoList(outfit)
+    if list and DressUpItemTransmogInfoList then
+        local ok = pcall(DressUpItemTransmogInfoList, list, true, true)
+        if ok then
+            self:RaiseDressUpFrame()
+            return true
+        end
+    end
+
+    local actor = DressUpFrame and DressUpFrame.ModelScene and DressUpFrame.ModelScene:GetPlayerActor()
+    if list and actor and actor.SetItemTransmogInfo then
+        if actor.Undress then
+            actor:Undress()
+        end
+        for slotID, itemTransmogInfo in ipairs(list) do
+            if itemTransmogInfo.appearanceID and itemTransmogInfo.appearanceID > 0 then
+                local ignoreChildItems = slotID ~= 16
+                pcall(actor.SetItemTransmogInfo, actor, itemTransmogInfo, slotID, ignoreChildItems)
+            end
+        end
+        self:RaiseDressUpFrame()
+        return true
+    end
+
+    if actor and actor.Undress then
+        actor:Undress()
+    end
+    for _, slotKey in ipairs(self.SLOTS or {}) do
+        local sourceID = self:GetDressUpSourceID(outfit.slots[slotKey])
+        if sourceID and DressUpVisual then
+            DressUpVisual(sourceID)
+        end
+    end
+    self:RaiseDressUpFrame()
+    return true
+end
+
 function StyleBound:FindOutfitByPrefix(prefix)
     for _, outfit in ipairs(self.db.global.outfits) do
         if outfit.id:sub(1, #prefix) == prefix then
@@ -65,26 +270,57 @@ end
 
 function StyleBound:SlashCommand(input)
     local cmd = self:GetArgs(input)
+    if cmd then
+        cmd = cmd:lower()
+    end
     if not cmd or cmd == "" then
         self:GetModule("MainPanel"):Toggle()
         return
+    elseif DEBUG_COMMANDS[cmd] and not self:IsDebugMode() then
+        self:Print("Unknown command: " .. cmd .. ". Type /sb help")
+        return
     elseif cmd == "help" then
-        self:Print("Commands: /sb help | /sb dbcheck | /sb export | /sb selftest")
-        self:Print("  /sb save <name> | /sb list | /sb get <id> | /sb delete <id>")
-        self:Print("  /sb rename <id> <name> | /sb folder <id> <folder>")
-        self:Print("  /sb folders | /sb mkfolder <name> | /sb rmfolder <name>")
-        self:Print("  /sb search <query> | /sb screenshot | /sb autoshoot | /sb selfie")
-        self:Print("  /sb copy — copy targeted player's transmog (use in a macro)")
+        self:Print("Commands: /sb | /sb screenshot | /sb autoshoot | /sb copy")
+        self:Print("  /sb opens the StyleBound panel.")
+        self:Print("  /sb screenshot starts a clean manual screenshot session.")
+        self:Print("  /sb autoshoot captures a quick three-angle screenshot set.")
+        self:Print("  /sb copy copies your target's transmog. Put it in a macro for quick use.")
+        if self:IsDebugMode() then
+            self:Print("Debug: /sb export | /sb import <string> | /sb selftest | /sb dbcheck | /sb probe[1-8]")
+        end
     elseif cmd == "export" then
-        self:GetModule("Export"):Debug()
+        if self:IsDebugMode() then
+            self:GetModule("Export"):Debug()
+        else
+            self:GetModule("MainPanel"):SelectTab("export")
+        end
     elseif cmd == "selftest" then
         self:GetModule("Export"):SelfTest()
     elseif cmd == "import" then
         local _, rest = self:GetArgs(input, 1)
         if not rest or rest == "" then
-            self:Print("Usage: /sb import <encoded string>")
+            self:GetModule("MainPanel"):SelectTab("import")
         else
-            self:GetModule("Import"):Debug(rest)
+            rest = rest:gsub("%s+", "")
+            local Import = self:GetModule("Import")
+            if self:IsDebugMode() then
+                Import:Debug(rest)
+            else
+                local outfit, decodeErr = Import:DecodeString(rest)
+                if not outfit then
+                    self:Print("Import failed: " .. tostring(decodeErr))
+                    return
+                end
+
+                local valid, validateErr = Import:ValidateSchema(outfit)
+                if not valid then
+                    self:Print("Import failed: " .. tostring(validateErr))
+                    return
+                end
+
+                local collected = Import:ResolveCollection(outfit)
+                self:GetModule("ImportDialog"):ShowResult(outfit, collected)
+            end
         end
     elseif cmd == "save" then
         local _, name = self:GetArgs(input, 1)
@@ -133,7 +369,7 @@ function StyleBound:SlashCommand(input)
         if not outfit then self:Print("No outfit matching '" .. id .. "'"); return end
         local old = outfit.name
         self:GetModule("OutfitLibrary"):Rename(outfit.id, newName)
-        self:Print("Renamed '" .. old .. "' → '" .. newName .. "'")
+        self:Print("Renamed '" .. old .. "' -> '" .. newName .. "'")
     elseif cmd == "folder" then
         local _, id, folderName = self:GetArgs(input, 2)
         if not id or not folderName then self:Print("Usage: /sb folder <id-prefix> <folder>"); return end
@@ -249,11 +485,13 @@ function StyleBound:SlashCommand(input)
                 local raceName, _, raceId = UnitRace("target")
                 local className, _, classId = UnitClass("target")
                 local gender = UnitSex("target")
+                local faction = UnitFactionGroup("target")
                 local level = UnitLevel("target")
 
                 local outfit = {
                     v     = 1,
                     kind  = "outfit",
+                    source = "copy",
                     char  = {
                         name    = tName,
                         realm   = tRealm:lower():gsub("%s+", "-"),
@@ -262,6 +500,8 @@ function StyleBound:SlashCommand(input)
                         class   = className,
                         classId = classId,
                         gender  = gender,
+                        sex     = SexFromGender(gender),
+                        faction = NormalizeFaction(faction),
                         level   = level,
                     },
                     slots = slots,

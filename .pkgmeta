@@ -2,5 +2,12 @@ package-as: StyleBound
 enable-nolib-creation: no
 ignore:
   - .github
+  - .gitignore
   - .pkgmeta
+  - ADDON_API_REFERENCE.md
+  - ADDON_ARCHITECTURE.md
+  - ADDON_DATA_MODEL.md
+  - ADDON_PROBES.md
+  - ADDON_PROJECT.md
+  - ADDON_TASKS.md
   - CHANGELOG.md

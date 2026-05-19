@@ -202,8 +202,13 @@ function Import:Debug(encoded)
     -- Step 3: Character info
     if outfit.char then
         local c = outfit.char
+        local parts = {}
+        if c.race then parts[#parts + 1] = tostring(c.race) end
+        if c.class then parts[#parts + 1] = tostring(c.class) end
+        if c.sex then parts[#parts + 1] = tostring(c.sex) end
+        if c.faction then parts[#parts + 1] = tostring(c.faction) end
         StyleBound:Print("Character: " .. tostring(c.name) .. "-" .. tostring(c.realm)
-            .. " (" .. tostring(c.race) .. " " .. tostring(c.class) .. ")")
+            .. " (" .. table.concat(parts, " ") .. ")")
     end
 
     -- Step 4: Slot summary

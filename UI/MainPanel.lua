@@ -6,6 +6,7 @@ local _, StyleBound = ...
 local MainPanel = StyleBound:NewModule("MainPanel")
 
 local AceGUI = LibStub("AceGUI-3.0")
+local UI = StyleBound.UI
 
 local frame = nil  -- singleton AceGUI frame
 
@@ -13,12 +14,22 @@ local frame = nil  -- singleton AceGUI frame
 -- Frame helpers: position persistence + full-border dragging
 -------------------------------------------------------------------------------
 
-local function ConfigureFrame(aceFrame, positionKey)
+local function ConfigureFrame(aceFrame, positionKey, minWidth, minHeight)
+    UI:ApplyFrame(aceFrame)
+
     if StyleBound.db and StyleBound.db.global.framePositions then
         aceFrame:SetStatusTable(StyleBound.db.global.framePositions[positionKey])
     end
+    UI:EnforceMinimumFrame(aceFrame, minWidth, minHeight)
 
     local rawFrame = aceFrame.frame
+    if minWidth and minHeight then
+        if rawFrame.SetResizeBounds then
+            rawFrame:SetResizeBounds(minWidth, minHeight)
+        elseif rawFrame.SetMinResize then
+            rawFrame:SetMinResize(minWidth, minHeight)
+        end
+    end
     rawFrame:SetMovable(true)
     rawFrame:EnableMouse(true)
     rawFrame:RegisterForDrag("LeftButton")
@@ -39,19 +50,43 @@ end
 -- Export view
 -------------------------------------------------------------------------------
 
+local function AddCopyBox(container, labelText, text, lines)
+    local box = AceGUI:Create("MultiLineEditBox")
+    box:SetLabel(labelText)
+    box:SetFullWidth(true)
+    box:SetNumLines(lines or 4)
+    box:SetText(text)
+    box:DisableButton(true)
+    container:AddChild(box)
+    return box
+end
+
 local function ShowExportView(container)
+    StyleBound:GetModule("OutfitBrowser"):ClearEmbedded()
     container:ReleaseChildren()
     container:SetLayout("List")
 
     local Export = StyleBound:GetModule("Export")
     local encoded = Export:GetExportString()
 
-    local editBox = AceGUI:Create("EditBox")
-    editBox:SetLabel("Your export string (Ctrl+A, Ctrl+C to copy):")
-    editBox:SetFullWidth(true)
-    editBox:SetText(encoded)
-    editBox:DisableButton(true)
-    container:AddChild(editBox)
+    local panel = UI:CreatePanel(container, "gold")
+    UI:AddText(panel, "Copy this outfit string into stylebound.gg when you submit or share your current transmog.", UI.Colors.muted)
+    UI:AddDivider(panel)
+
+    local editBox = AddCopyBox(panel, "Current outfit string:", encoded, 3)
+    UI:AddSpacer(panel, 8)
+
+    local commandPanel = UI:CreatePanel(container, "subtle")
+    UI:AddText(commandPanel, "Using StyleBound", UI.Colors.text, GameFontNormalLarge)
+    UI:AddDivider(commandPanel)
+    UI:AddText(commandPanel, "|cFFFFD100/sb|r opens this panel.", UI.Colors.muted)
+    UI:AddText(commandPanel, "|cFFFFD100/sb screenshot|r starts a manual clean screenshot session. Press Escape when you are done.", UI.Colors.muted)
+    UI:AddText(commandPanel, "|cFFFFD100/sb autoshoot|r captures a quick three-angle screenshot set.", UI.Colors.muted)
+    UI:AddText(commandPanel, "|cFFFFD100/sb copy|r copies your target's transmog into an import preview. For regular use, make a macro with /sb copy as the body, drag it to your bars, target a player, then press it.", UI.Colors.muted)
+    UI:AddDivider(commandPanel)
+    UI:AddText(commandPanel, "Screenshots are saved by WoW in |cFFFFD100World of Warcraft\\_retail_\\Screenshots|r. Sort that folder by date to find the newest StyleBound shots.", UI.Colors.muted)
+    UI:AddText(commandPanel, "On |cFFFFD100stylebound.gg|r, import the outfit string from this Export tab and attach the matching screenshots from that folder.", UI.Colors.muted)
+    UI:AddSpacer(commandPanel, 8)
 
     C_Timer.After(0.05, function()
         editBox:SetFocus()
@@ -64,17 +99,18 @@ end
 -------------------------------------------------------------------------------
 
 local function ShowScreenshotView(container)
+    StyleBound:GetModule("OutfitBrowser"):ClearEmbedded()
     container:ReleaseChildren()
+    container:SetLayout("List")
 
-    local desc = AceGUI:Create("Label")
-    desc:SetText("Take screenshots with the UI hidden. Your current outfit is captured automatically for export.")
-    desc:SetFullWidth(true)
-    container:AddChild(desc)
+    local panel = UI:CreatePanel(container, "gold")
+    UI:AddText(panel, "Take clean screenshots with the UI hidden. The addon keeps the matching outfit export ready when you finish.", UI.Colors.muted)
+    UI:AddDivider(panel)
 
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
+    local btnGroup = AceGUI:Create("SimpleGroup")
+    btnGroup:SetFullWidth(true)
+    btnGroup:SetLayout("Flow")
+    panel:AddChild(btnGroup)
 
     -- Manual screenshot session
     local ssBtn = AceGUI:Create("Button")
@@ -86,7 +122,7 @@ local function ShowScreenshotView(container)
             StyleBound:GetModule("Screenshot"):StartSession()
         end)
     end)
-    container:AddChild(ssBtn)
+    btnGroup:AddChild(ssBtn)
 
     -- Auto-shoot
     local autoBtn = AceGUI:Create("Button")
@@ -98,18 +134,25 @@ local function ShowScreenshotView(container)
             StyleBound:GetModule("Screenshot"):StartAutoShoot()
         end)
     end)
-    container:AddChild(autoBtn)
+    btnGroup:AddChild(autoBtn)
 
     -- S.E.L.F.I.E. button (secure frame, embedded)
     local selfieGroup = AceGUI:Create("SimpleGroup")
     selfieGroup:SetFullWidth(true)
     selfieGroup:SetLayout("Flow")
-    container:AddChild(selfieGroup)
+    panel:AddChild(selfieGroup)
 
+    local selfieEnabled = StyleBound.db.global.settings.interceptSelfieCamera ~= false
     local selfieLabel = AceGUI:Create("Label")
-    selfieLabel:SetText("\nS.E.L.F.I.E. — Use the toy directly. The addon detects the buff and tracks your shots automatically.")
+    if selfieEnabled then
+        selfieLabel:SetText("S.E.L.F.I.E. - use the toy directly. The addon detects the buff and tracks your shots automatically.")
+    else
+        selfieLabel:SetText("S.E.L.F.I.E. tracking is off. Enable it in Settings if you want StyleBound to track selfie shots.")
+    end
     selfieLabel:SetFullWidth(true)
+    UI:SetLabelColor(selfieLabel, UI.Colors.muted)
     selfieGroup:AddChild(selfieLabel)
+    UI:AddSpacer(panel, 8)
 end
 
 -------------------------------------------------------------------------------
@@ -117,32 +160,27 @@ end
 -------------------------------------------------------------------------------
 
 local function ShowImportView(container)
+    StyleBound:GetModule("OutfitBrowser"):ClearEmbedded()
     container:ReleaseChildren()
     container:SetLayout("List")
 
     local Import = StyleBound:GetModule("Import")
 
-    local desc = AceGUI:Create("Label")
-    desc:SetText("Paste a StyleBound export string below to preview and import a transmog outfit.")
-    desc:SetFullWidth(true)
-    container:AddChild(desc)
-
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
+    local panel = UI:CreatePanel(container, "gold")
+    UI:AddText(panel, "Paste a StyleBound export string below to preview it in-game, check collection status, or save it to your library.", UI.Colors.muted)
+    UI:AddDivider(panel)
 
     local editBox = AceGUI:Create("MultiLineEditBox")
     editBox:SetLabel("Export String:")
     editBox:SetFullWidth(true)
     editBox:SetNumLines(6)
     editBox:DisableButton(true)
-    container:AddChild(editBox)
+    panel:AddChild(editBox)
 
     local errorLabel = AceGUI:Create("Label")
     errorLabel:SetText("")
     errorLabel:SetFullWidth(true)
-    container:AddChild(errorLabel)
+    panel:AddChild(errorLabel)
 
     local decodeBtn = AceGUI:Create("Button")
     decodeBtn:SetText("Decode")
@@ -169,11 +207,15 @@ local function ShowImportView(container)
 
         local collected = Import:ResolveCollection(outfit)
 
-        -- Open standalone result dialog
         local ImportDialog = StyleBound:GetModule("ImportDialog")
-        ImportDialog:ShowResult(outfit, collected)
+        ImportDialog:RenderResult(container, outfit, collected, {
+            back = function()
+                ShowImportView(container)
+            end,
+        })
     end)
-    container:AddChild(decodeBtn)
+    panel:AddChild(decodeBtn)
+    UI:AddSpacer(panel, 8)
 
     C_Timer.After(0.05, function()
         editBox:SetFocus()
@@ -181,31 +223,43 @@ local function ShowImportView(container)
 end
 
 local function ShowOutfitsView(container)
+    local OutfitBrowser = StyleBound:GetModule("OutfitBrowser")
+    OutfitBrowser:Hide()
+    OutfitBrowser:ClearEmbedded()
     container:ReleaseChildren()
+    OutfitBrowser:Render(container)
+end
 
-    local desc = AceGUI:Create("Label")
-    desc:SetText("Click below to open the full Outfit Browser, or use /sb outfits.")
-    desc:SetFullWidth(true)
-    container:AddChild(desc)
+local function ShowSettingsView(container)
+    StyleBound:GetModule("OutfitBrowser"):ClearEmbedded()
+    container:ReleaseChildren()
+    container:SetLayout("List")
 
-    local count = #StyleBound.db.global.outfits
-    local countLabel = AceGUI:Create("Label")
-    countLabel:SetText("\nYou have " .. count .. " saved outfit(s).")
-    countLabel:SetFullWidth(true)
-    container:AddChild(countLabel)
+    local panel = UI:CreatePanel(container, "gold")
+    UI:AddText(panel, "Settings", UI.Colors.text, GameFontNormalLarge)
+    UI:AddDivider(panel)
 
-    local spacer = AceGUI:Create("Label")
-    spacer:SetText(" ")
-    spacer:SetFullWidth(true)
-    container:AddChild(spacer)
-
-    local browseBtn = AceGUI:Create("Button")
-    browseBtn:SetText("Open Outfit Browser")
-    browseBtn:SetWidth(200)
-    browseBtn:SetCallback("OnClick", function()
-        StyleBound:GetModule("OutfitBrowser"):Show()
+    local showMinimap = AceGUI:Create("CheckBox")
+    showMinimap:SetLabel("Show minimap button")
+    showMinimap:SetDescription("Toggle the StyleBound minimap launcher. You can always reopen this panel with /sb.")
+    showMinimap:SetFullWidth(true)
+    showMinimap:SetValue(StyleBound.db.global.settings.showMinimapButton ~= false)
+    showMinimap:SetCallback("OnValueChanged", function(_, _, value)
+        StyleBound:SetMinimapButtonShown(value)
     end)
-    container:AddChild(browseBtn)
+    panel:AddChild(showMinimap)
+
+    local interceptSelfie = AceGUI:Create("CheckBox")
+    interceptSelfie:SetLabel("Track S.E.L.F.I.E. Camera toy")
+    interceptSelfie:SetDescription("When enabled, StyleBound starts a screenshot handoff when the toy camera is active.")
+    interceptSelfie:SetFullWidth(true)
+    interceptSelfie:SetValue(StyleBound.db.global.settings.interceptSelfieCamera ~= false)
+    interceptSelfie:SetCallback("OnValueChanged", function(_, _, value)
+        StyleBound:GetModule("Selfie"):SetInterceptEnabled(value)
+    end)
+    panel:AddChild(interceptSelfie)
+
+    UI:AddSpacer(panel, 8)
 end
 
 -------------------------------------------------------------------------------
@@ -217,6 +271,7 @@ local TABS = {
     { value = "import",     text = "Import"     },
     { value = "outfits",    text = "Outfits"    },
     { value = "screenshot", text = "Screenshot" },
+    { value = "settings",   text = "Settings"   },
 }
 
 local TAB_VIEWS = {
@@ -224,6 +279,7 @@ local TAB_VIEWS = {
     import     = ShowImportView,
     outfits    = ShowOutfitsView,
     screenshot = ShowScreenshotView,
+    settings   = ShowSettingsView,
 }
 
 -------------------------------------------------------------------------------
@@ -233,11 +289,11 @@ local TAB_VIEWS = {
 local function CreatePanel()
     local f = AceGUI:Create("Frame")
     f:SetTitle("StyleBound")
-    f:SetStatusText("StyleBound v0.1.0  |  stylebound.gg")
-    f:SetWidth(500)
-    f:SetHeight(450)
+    f:SetStatusText("stylebound.gg")
+    f:SetWidth(760)
+    f:SetHeight(560)
     f:SetLayout("Fill")
-    ConfigureFrame(f, "mainPanel")
+    ConfigureFrame(f, "mainPanel", 760, 560)
     f:SetCallback("OnClose", function(widget)
         AceGUI:Release(widget)
         frame = nil

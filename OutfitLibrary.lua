@@ -20,6 +20,17 @@ local function Folders()
     return StyleBound.db.global.folders
 end
 
+local function TrimText(value)
+    if not value then return "" end
+    return (value:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function NotifyChanged(action, value)
+    if StyleBound.SendMessage then
+        StyleBound:SendMessage("STYLEBOUND_OUTFITS_CHANGED", action, value)
+    end
+end
+
 -------------------------------------------------------------------------------
 -- CRUD
 -------------------------------------------------------------------------------
@@ -44,6 +55,7 @@ function OutfitLibrary:Save(outfitTable, name)
 
     local outfits = Outfits()
     outfits[#outfits + 1] = record
+    NotifyChanged("save", record)
     return id
 end
 
@@ -60,7 +72,9 @@ function OutfitLibrary:Delete(id)
     local outfits = Outfits()
     for i, outfit in ipairs(outfits) do
         if outfit.id == id then
+            local removed = outfit
             table.remove(outfits, i)
+            NotifyChanged("delete", removed)
             return true
         end
     end
@@ -72,6 +86,7 @@ function OutfitLibrary:Rename(id, newName)
     if not outfit then return false end
     outfit.name = newName
     outfit.modified = time()
+    NotifyChanged("rename", outfit)
     return true
 end
 
@@ -80,6 +95,7 @@ function OutfitLibrary:SetFolder(id, folderName)
     if not outfit then return false end
     outfit.folder = folderName
     outfit.modified = time()
+    NotifyChanged("folder", outfit)
     return true
 end
 
@@ -98,17 +114,65 @@ end
 -------------------------------------------------------------------------------
 
 function OutfitLibrary:CreateFolder(name)
+    name = TrimText(name)
+    if name == "" then
+        return false, "empty"
+    end
+
     local folders = Folders()
     for _, existing in ipairs(folders) do
         if existing == name then
-            return false
+            return false, "exists"
         end
     end
     folders[#folders + 1] = name
+    NotifyChanged("folder-create", name)
+    return true
+end
+
+function OutfitLibrary:RenameFolder(oldName, newName)
+    oldName = TrimText(oldName)
+    newName = TrimText(newName)
+    if oldName == "" or newName == "" then
+        return false, "empty"
+    end
+    if oldName == newName then
+        return true
+    end
+
+    local folders = Folders()
+    local folderIndex = nil
+    for i, existing in ipairs(folders) do
+        if existing == newName then
+            return false, "exists"
+        end
+        if existing == oldName then
+            folderIndex = i
+        end
+    end
+
+    if not folderIndex then
+        return false, "missing"
+    end
+
+    folders[folderIndex] = newName
+    for _, outfit in ipairs(Outfits()) do
+        if outfit.folder == oldName then
+            outfit.folder = newName
+            outfit.modified = time()
+        end
+    end
+
+    NotifyChanged("folder-rename", { oldName = oldName, newName = newName })
     return true
 end
 
 function OutfitLibrary:DeleteFolder(name)
+    name = TrimText(name)
+    if name == "" then
+        return false, "empty"
+    end
+
     local folders = Folders()
     for i, existing in ipairs(folders) do
         if existing == name then
@@ -117,8 +181,10 @@ function OutfitLibrary:DeleteFolder(name)
             for _, outfit in ipairs(Outfits()) do
                 if outfit.folder == name then
                     outfit.folder = nil
+                    outfit.modified = time()
                 end
             end
+            NotifyChanged("folder-delete", name)
             return true
         end
     end

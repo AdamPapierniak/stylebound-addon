@@ -24,12 +24,28 @@ local function SlugifyRealm(realm)
     return realm:lower():gsub("%s+", "-")
 end
 
+local function NormalizeFaction(faction)
+    if not faction then return nil end
+    local normalized = faction:lower()
+    if normalized == "alliance" or normalized == "horde" or normalized == "neutral" then
+        return normalized
+    end
+    return nil
+end
+
+local function SexFromGender(gender)
+    if gender == 2 then return "male" end
+    if gender == 3 then return "female" end
+    return "unknown"
+end
+
 local function BuildCharacterBlock()
     local name = UnitName("player")
     local realm = GetRealmName()
     local raceName, _, raceId = UnitRace("player")
     local className, _, classId = UnitClass("player")
     local gender = UnitSex("player")
+    local faction = UnitFactionGroup("player")
     local level = UnitLevel("player")
 
     local spec = nil
@@ -46,6 +62,8 @@ local function BuildCharacterBlock()
         class   = className,
         classId = classId,
         gender  = gender,
+        sex     = SexFromGender(gender),
+        faction = NormalizeFaction(faction),
         spec    = spec,
         level   = level,
     }

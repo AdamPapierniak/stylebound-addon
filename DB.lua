@@ -31,6 +31,7 @@ StyleBound.dbDefaults = {
             screenshotCameraPreset      = "front",
             screenshotHideNameplates    = true,
             screenshotHideChat          = true,
+            interceptSelfieCamera       = true,
             showMinimapButton           = true,
             chatNotifications           = true,
             tooltipIntegration          = true,
