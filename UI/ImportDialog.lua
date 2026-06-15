@@ -16,6 +16,7 @@ local frame = nil  -- singleton
 
 local function ConfigureFrame(aceFrame, positionKey, minWidth, minHeight)
     UI:ApplyFrame(aceFrame)
+    UI:HideStatusBar(aceFrame)
 
     -- Position persistence via AceGUI SetStatusTable
     if StyleBound.db and StyleBound.db.global.framePositions then

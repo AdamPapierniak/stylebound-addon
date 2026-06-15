@@ -157,6 +157,7 @@ end
 
 local function ConfigureFrame(aceFrame, positionKey, minWidth, minHeight)
     UI:ApplyFrame(aceFrame)
+    UI:HideStatusBar(aceFrame)
 
     if StyleBound.db and StyleBound.db.global.framePositions then
         if not StyleBound.db.global.framePositions[positionKey] then
@@ -702,7 +703,7 @@ local function BuildOutfitList(container, refreshCallback)
     local outfits = OutfitLibrary:List(activeFolder)
 
     if #outfits == 0 then
-        local emptyPanel = UI:CreatePanel(container, "subtle")
+        local emptyPanel = UI:CreateSection(container, 4)
         emptyPanel:SetFullHeight(true)
 
         local emptyLabel = AceGUI:Create("Label")
@@ -867,7 +868,7 @@ function BuildSearchResults(outfitContainer, query)
     local results = OutfitLibrary:Search(query)
 
     if #results == 0 then
-        local emptyPanel = UI:CreatePanel(outfitContainer, "subtle")
+        local emptyPanel = UI:CreateSection(outfitContainer, 4)
         emptyPanel:SetFullHeight(true)
 
         local label = AceGUI:Create("Label")
@@ -901,7 +902,6 @@ local function BuildLibraryChrome(root, target)
     searchGroup:SetHeight(SEARCH_HEIGHT)
     searchGroup.noAutoHeight = true
     searchGroup:SetLayout("Flow")
-    UI:StylePanel(searchGroup, "gold")
     root:AddChild(searchGroup)
 
     local searchBox = AceGUI:Create("EditBox")
@@ -914,13 +914,11 @@ local function BuildLibraryChrome(root, target)
     folderPane:SetWidth(FOLDER_PANE_WIDTH)
     folderPane.noAutoHeight = true
     folderPane:SetLayout("List")
-    UI:StylePanel(folderPane, "subtle")
     root:AddChild(folderPane)
 
     -- Right pane: outfit list (fills remaining)
     local outfitPane = AceGUI:Create("ScrollFrame")
     outfitPane:SetLayout("List")
-    UI:StylePanel(outfitPane, "subtle")
     root:AddChild(outfitPane)
 
     if target == "standalone" then

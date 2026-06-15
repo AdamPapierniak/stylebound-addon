@@ -16,6 +16,7 @@ local frame = nil  -- singleton AceGUI frame
 
 local function ConfigureFrame(aceFrame, positionKey, minWidth, minHeight)
     UI:ApplyFrame(aceFrame)
+    UI:HideStatusBar(aceFrame)
 
     if StyleBound.db and StyleBound.db.global.framePositions then
         aceFrame:SetStatusTable(StyleBound.db.global.framePositions[positionKey])
@@ -69,14 +70,14 @@ local function ShowExportView(container)
     local Export = StyleBound:GetModule("Export")
     local encoded = Export:GetExportString()
 
-    local panel = UI:CreatePanel(container, "gold")
+    local panel = UI:CreateSection(container, 4)
     UI:AddText(panel, "Copy this outfit string into stylebound.gg when you submit or share your current transmog.", UI.Colors.muted)
     UI:AddDivider(panel)
 
     local editBox = AddCopyBox(panel, "Current outfit string:", encoded, 3)
     UI:AddSpacer(panel, 8)
 
-    local commandPanel = UI:CreatePanel(container, "subtle")
+    local commandPanel = UI:CreateSection(container, 8)
     UI:AddText(commandPanel, "Using StyleBound", UI.Colors.text, GameFontNormalLarge)
     UI:AddDivider(commandPanel)
     UI:AddText(commandPanel, "|cFFFFD100/sb|r opens this panel.", UI.Colors.muted)
@@ -103,7 +104,7 @@ local function ShowScreenshotView(container)
     container:ReleaseChildren()
     container:SetLayout("List")
 
-    local panel = UI:CreatePanel(container, "gold")
+    local panel = UI:CreateSection(container, 4)
     UI:AddText(panel, "Take clean screenshots with the UI hidden. The addon keeps the matching outfit export ready when you finish.", UI.Colors.muted)
     UI:AddDivider(panel)
 
@@ -166,7 +167,7 @@ local function ShowImportView(container)
 
     local Import = StyleBound:GetModule("Import")
 
-    local panel = UI:CreatePanel(container, "gold")
+    local panel = UI:CreateSection(container, 4)
     UI:AddText(panel, "Paste a StyleBound export string below to preview it in-game, check collection status, or save it to your library.", UI.Colors.muted)
     UI:AddDivider(panel)
 
@@ -235,7 +236,7 @@ local function ShowSettingsView(container)
     container:ReleaseChildren()
     container:SetLayout("List")
 
-    local panel = UI:CreatePanel(container, "gold")
+    local panel = UI:CreateSection(container, 4)
     UI:AddText(panel, "Settings", UI.Colors.text, GameFontNormalLarge)
     UI:AddDivider(panel)
 
@@ -289,7 +290,6 @@ local TAB_VIEWS = {
 local function CreatePanel()
     local f = AceGUI:Create("Frame")
     f:SetTitle("StyleBound")
-    f:SetStatusText("stylebound.gg")
     f:SetWidth(760)
     f:SetHeight(560)
     f:SetLayout("Fill")
@@ -302,6 +302,7 @@ local function CreatePanel()
     local tabGroup = AceGUI:Create("TabGroup")
     tabGroup:SetTabs(TABS)
     tabGroup:SetLayout("Fill")
+    UI:StyleTabGroup(tabGroup)
     tabGroup:SetCallback("OnGroupSelected", function(container, _, group)
         local viewFn = TAB_VIEWS[group]
         if viewFn then

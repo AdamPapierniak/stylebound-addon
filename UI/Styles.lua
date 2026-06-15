@@ -58,6 +58,28 @@ function UI:ApplyFrame(aceFrame)
     end
 end
 
+function UI:StyleTabGroup(tabGroup)
+    if not tabGroup then return end
+
+    local border = tabGroup.border
+    if border and border.SetBackdropColor then
+        border:SetBackdropColor(0, 0, 0, 0)
+    end
+    if border and border.SetBackdropBorderColor then
+        border:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+end
+
+function UI:HideStatusBar(aceFrame)
+    if not aceFrame or not aceFrame.statustext then return end
+
+    aceFrame.statustext:SetText("")
+    local statusBar = aceFrame.statustext:GetParent()
+    if statusBar then
+        statusBar:Hide()
+    end
+end
+
 function UI:EnforceMinimumFrame(aceFrame, minWidth, minHeight)
     if not aceFrame or not aceFrame.frame then return end
 
@@ -112,33 +134,27 @@ function UI:StylePanel(widget, variant)
 
     local transparent = { 0, 0, 0, 0 }
     local bgColor = colors.panel
-    local borderColor = colors.border
-    local topColor = nil
-    local bottomColor = nil
+    local borderColor = transparent
+    local topColor = transparent
+    local bottomColor = transparent
     local sideColor = transparent
     if variant == "subtle" then
         bgColor = colors.panelAlt
     elseif variant == "gold" then
-        borderColor = colors.goldDim
+        bgColor = { 0.052, 0.045, 0.035, 0.90 }
     elseif variant == "card" then
         bgColor = colors.panelAlt
-        borderColor = colors.faint
-        topColor = transparent
-        bottomColor = transparent
     elseif variant == "cardGold" then
         bgColor = { 0.052, 0.045, 0.035, 0.96 }
-        borderColor = colors.goldDim
-        topColor = transparent
-        bottomColor = transparent
     elseif variant == "titleStrip" then
         bgColor = { 0.070, 0.066, 0.058, 0.98 }
-        borderColor = colors.border
     elseif variant == "titleStripGold" then
         bgColor = { 0.085, 0.071, 0.043, 0.98 }
-        borderColor = colors.goldDim
     elseif variant == "selected" then
         bgColor = { 0.105, 0.092, 0.061, 0.98 }
         borderColor = colors.gold
+        topColor = borderColor
+        bottomColor = borderColor
     end
 
     SetTextureColor(bg, bgColor)
@@ -160,16 +176,8 @@ end
 function UI:AddDivider(container)
     local sep = AceGUI:Create("SimpleGroup")
     sep:SetFullWidth(true)
-    sep:SetHeight(12)
+    sep:SetHeight(10)
     sep.noAutoHeight = true
-
-    local line = sep.frame:CreateTexture(nil, "BORDER")
-    line:SetPoint("LEFT", sep.frame, "LEFT", 4, 0)
-    line:SetPoint("RIGHT", sep.frame, "RIGHT", -4, 0)
-    line:SetPoint("CENTER", sep.frame, "CENTER", 0, 0)
-    line:SetHeight(1)
-    SetTextureColor(line, self.Colors.border)
-
     container:AddChild(sep)
     return sep
 end
@@ -198,6 +206,17 @@ function UI:CreatePanel(container, variant, paddingTop)
         self:AddSpacer(panel, paddingTop or 8)
     end
     return panel
+end
+
+function UI:CreateSection(container, paddingTop)
+    local section = AceGUI:Create("SimpleGroup")
+    section:SetFullWidth(true)
+    section:SetLayout("List")
+    container:AddChild(section)
+    if paddingTop ~= false then
+        self:AddSpacer(section, paddingTop or 8)
+    end
+    return section
 end
 
 function UI:CreateRow(container, variant, layout)
