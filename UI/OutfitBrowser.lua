@@ -594,6 +594,24 @@ local function AddActionLink(container, text, width, callback, tint)
     return link
 end
 
+local function AddRowPadding(container, width)
+    local padding = AceGUI:Create("Label")
+    padding:SetText("")
+    padding:SetWidth(width or 8)
+    container:AddChild(padding)
+    return padding
+end
+
+local function AddMutedInlineLabel(container, text, width)
+    local label = AceGUI:Create("Label")
+    label:SetText(text or "")
+    label:SetWidth(width)
+    label:SetFontObject(GameFontHighlightSmall)
+    UI:SetLabelColor(label, UI.Colors.muted)
+    container:AddChild(label)
+    return label
+end
+
 local function AttachTooltip(widget, title, body)
     if not widget or not widget.frame then
         return
@@ -623,17 +641,19 @@ local function AddOutfitCards(container, outfits, refreshCallback)
         local labelWidth = GetPaneLabelWidth(container)
         for _ in pairs(outfit.slots or {}) do slotCount = slotCount + 1 end
 
-        local card = UI:CreatePanel(container, #missing > 0 and "cardGold" or "card", false)
-        card:SetHeight(60)
+        local hasMissing = #missing > 0
+        local card = UI:CreatePanel(container, hasMissing and "cardWarning" or "card", false)
+        card:SetHeight(66)
         card.noAutoHeight = true
 
         local row = AceGUI:Create("SimpleGroup")
         row:SetFullWidth(true)
-        row:SetHeight(24)
+        row:SetHeight(30)
         row.noAutoHeight = true
         row:SetLayout("Flow")
-        UI:StylePanel(row, #missing > 0 and "titleStripGold" or "titleStrip")
+        UI:StylePanel(row, hasMissing and "titleStripWarning" or "titleStrip")
         card:AddChild(row)
+        AddRowPadding(row, 8)
 
         local badge = SOURCE_BADGES[outfit.source] or ""
         local nameText = "|cFFFFD100" .. (outfit.name or "Untitled") .. "|r"
@@ -641,7 +661,7 @@ local function AddOutfitCards(container, outfits, refreshCallback)
             nameText = nameText .. "  " .. badge
         end
         nameText = nameText .. "  |cFF888888" .. slotCount .. " slots|r"
-        if #missing > 0 then
+        if hasMissing then
             nameText = nameText .. "  |cFFFF6600" .. #missing .. " missing|r"
         end
         if outfit.folder then
@@ -650,14 +670,14 @@ local function AddOutfitCards(container, outfits, refreshCallback)
 
         local nameLabel = AceGUI:Create("InteractiveLabel")
         nameLabel:SetText(nameText)
-        nameLabel:SetWidth(labelWidth)
+        nameLabel:SetWidth(max(260, labelWidth - 12))
         nameLabel:SetFontObject(GameFontNormal)
         nameLabel:SetCallback("OnClick", function()
             PreviewOutfit(outfit)
         end)
         row:AddChild(nameLabel)
 
-        if #missing > 0 then
+        if hasMissing then
             AttachTooltip(nameLabel, "Missing appearances", FormatMissingSlots(missing))
         elseif outfit.folder then
             AttachTooltip(nameLabel, "Folder", outfit.folder)
@@ -665,10 +685,13 @@ local function AddOutfitCards(container, outfits, refreshCallback)
 
         local actionRow = AceGUI:Create("SimpleGroup")
         actionRow:SetFullWidth(true)
-        actionRow:SetHeight(18)
+        actionRow:SetHeight(28)
         actionRow.noAutoHeight = true
         actionRow:SetLayout("Flow")
+        UI:StylePanel(actionRow, hasMissing and "actionStripWarning" or "actionStrip")
         card:AddChild(actionRow)
+        AddRowPadding(actionRow, 18)
+        AddMutedInlineLabel(actionRow, "Actions:", 58)
 
         AddActionLink(actionRow, "Preview", 56, function()
             PreviewOutfit(outfit)
@@ -693,6 +716,8 @@ local function AddOutfitCards(container, outfits, refreshCallback)
         AddActionLink(actionRow, "Delete", 48, function()
             ConfirmDelete(outfit, refreshCallback)
         end, "|cFFFF6B5E")
+
+        UI:AddSpacer(container, 8)
     end
 end
 
@@ -732,6 +757,42 @@ end
 -- Build folder pane
 -------------------------------------------------------------------------------
 
+local function AddFolderRow(container, text, selected, callback)
+    local row = AceGUI:Create("SimpleGroup")
+    row:SetFullWidth(true)
+    row:SetHeight(24)
+    row.noAutoHeight = true
+    row:SetLayout("Flow")
+    UI:StylePanel(row, selected and "folderSelected" or "folderRow")
+    container:AddChild(row)
+
+    AddRowPadding(row, 6)
+
+    local label = AceGUI:Create("InteractiveLabel")
+    local prefix = selected and "|cFF00FF00> |r" or "  "
+    label:SetText(prefix .. text)
+    label:SetWidth(FOLDER_PANE_WIDTH - 20)
+    label:SetFontObject(GameFontHighlight)
+    label:SetCallback("OnClick", callback)
+    row:AddChild(label)
+    return row
+end
+
+local function AddFolderActions(container, renameCallback, deleteCallback)
+    local row = AceGUI:Create("SimpleGroup")
+    row:SetFullWidth(true)
+    row:SetHeight(22)
+    row.noAutoHeight = true
+    row:SetLayout("Flow")
+    UI:StylePanel(row, "actionStrip")
+    container:AddChild(row)
+
+    AddRowPadding(row, 18)
+    AddActionLink(row, "Rename", 68, renameCallback)
+    AddActionLink(row, "Delete", 52, deleteCallback, "|cFFFF6B5E")
+    return row
+end
+
 function BuildFolderPane(container, outfitContainer)
     container:ReleaseChildren()
 
@@ -741,71 +802,42 @@ function BuildFolderPane(container, outfitContainer)
     end
 
     -- "All" button
-    local allBtn = AceGUI:Create("InteractiveLabel")
     local outfitRecords = StyleBound.db.global.outfits or {}
     local allText = "All Outfits |cFF888888(" .. #outfitRecords .. ")|r"
-    if activeFolder == nil then
-        allText = "|cFF00FF00> |r" .. allText
-    end
-    allBtn:SetText(allText)
-    allBtn:SetFullWidth(true)
-    allBtn:SetFontObject(GameFontHighlight)
-    allBtn:SetCallback("OnClick", function()
+    UI:AddSpacer(container, 4)
+    AddFolderRow(container, allText, activeFolder == nil, function()
         activeFolder = nil
         refreshAll()
     end)
-    container:AddChild(allBtn)
 
     -- Folder list
     local folders = StyleBound.db.global.folders or {}
     for _, folderName in ipairs(folders) do
         local currentFolder = folderName
-        local folderBtn = AceGUI:Create("InteractiveLabel")
-        local text = currentFolder
-        if activeFolder == currentFolder then
-            text = "|cFF00FF00> |r" .. text
-        end
         -- Count outfits in folder
         local count = 0
         for _, o in ipairs(outfitRecords) do
             if o.folder == currentFolder then count = count + 1 end
         end
-        text = text .. " |cFF888888(" .. count .. ")|r"
-        folderBtn:SetText(text)
-        folderBtn:SetFullWidth(true)
-        folderBtn:SetFontObject(GameFontHighlight)
-        folderBtn:SetCallback("OnClick", function()
+
+        AddFolderRow(container, currentFolder .. " |cFF888888(" .. count .. ")|r", activeFolder == currentFolder, function()
             activeFolder = currentFolder
             refreshAll()
         end)
-        container:AddChild(folderBtn)
 
         if activeFolder == currentFolder then
-            local actions = AceGUI:Create("SimpleGroup")
-            actions:SetFullWidth(true)
-            actions:SetHeight(18)
-            actions.noAutoHeight = true
-            actions:SetLayout("Flow")
-            container:AddChild(actions)
-
-            AddActionLink(actions, "Rename", 68, function()
+            AddFolderActions(container, function()
                 PromptRenameFolder(currentFolder, refreshAll)
-            end)
-
-            AddActionLink(actions, "Delete", 52, function()
+            end, function()
                 ConfirmDeleteFolder(currentFolder, refreshAll)
-            end, "|cFFFF6B5E")
+            end)
         end
     end
 
     UI:AddSpacer(container, 6)
 
     -- New Folder button
-    local newFolderBtn = AceGUI:Create("InteractiveLabel")
-    newFolderBtn:SetText("|cFFFFD100+ New Folder|r")
-    newFolderBtn:SetFullWidth(true)
-    newFolderBtn:SetFontObject(GameFontHighlightSmall)
-    newFolderBtn:SetCallback("OnClick", function()
+    AddFolderRow(container, "|cFFFFD100+ New Folder|r", false, function()
         local promptFrame = AceGUI:Create("Frame")
         promptFrame:SetTitle("New Folder")
         promptFrame:SetWidth(300)
@@ -851,7 +883,6 @@ function BuildFolderPane(container, outfitContainer)
             nameBox:SetFocus()
         end)
     end)
-    container:AddChild(newFolderBtn)
 
     -- Build outfit list with the shared refresh
     BuildOutfitList(outfitContainer, refreshAll)
@@ -902,6 +933,7 @@ local function BuildLibraryChrome(root, target)
     searchGroup:SetHeight(SEARCH_HEIGHT)
     searchGroup.noAutoHeight = true
     searchGroup:SetLayout("Flow")
+    UI:StylePanel(searchGroup, "pane")
     root:AddChild(searchGroup)
 
     local searchBox = AceGUI:Create("EditBox")
@@ -914,11 +946,13 @@ local function BuildLibraryChrome(root, target)
     folderPane:SetWidth(FOLDER_PANE_WIDTH)
     folderPane.noAutoHeight = true
     folderPane:SetLayout("List")
+    UI:StylePanel(folderPane, "pane")
     root:AddChild(folderPane)
 
     -- Right pane: outfit list (fills remaining)
     local outfitPane = AceGUI:Create("ScrollFrame")
     outfitPane:SetLayout("List")
+    UI:StylePanel(outfitPane, "pane")
     root:AddChild(outfitPane)
 
     if target == "standalone" then

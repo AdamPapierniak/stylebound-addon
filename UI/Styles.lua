@@ -8,9 +8,10 @@ local UI = StyleBound.UI
 local AceGUI = LibStub("AceGUI-3.0")
 
 UI.Colors = {
-    bg       = { 0.039, 0.039, 0.039, 0.98 }, -- #0A0A0A
-    panel    = { 0.067, 0.067, 0.067, 0.96 }, -- #111111
-    panelAlt = { 0.032, 0.032, 0.032, 0.94 },
+    bg       = { 0.030, 0.028, 0.024, 1.00 }, -- #080706
+    surface  = { 0.100, 0.096, 0.086, 1.00 }, -- #1A1816
+    panel    = { 0.030, 0.030, 0.028, 1.00 }, -- #080807
+    panelAlt = { 0.050, 0.048, 0.044, 1.00 },
     border   = { 0.165, 0.145, 0.125, 1.00 }, -- #2A2520
     gold     = { 0.788, 0.659, 0.298, 1.00 }, -- #C9A84C
     goldDim  = { 0.34, 0.27, 0.12, 1.00 },
@@ -33,6 +34,12 @@ local function EnsureTexture(frame, key, layer)
     return frame[key]
 end
 
+local function AnchorInset(texture, frame, left, top, right, bottom)
+    texture:ClearAllPoints()
+    texture:SetPoint("TOPLEFT", frame, "TOPLEFT", left or 0, top or 0)
+    texture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", right or 0, bottom or 0)
+end
+
 function UI:SetLabelColor(widget, color)
     if widget and widget.SetColor then
         widget:SetColor(color[1], color[2], color[3])
@@ -50,6 +57,17 @@ function UI:ApplyFrame(aceFrame)
     if frame.SetBackdropBorderColor then
         frame:SetBackdropBorderColor(colors.goldDim[1], colors.goldDim[2], colors.goldDim[3], 1)
     end
+
+    local matte = EnsureTexture(frame, "StyleBoundFrameMatte", "BACKGROUND")
+    AnchorInset(matte, frame, 11, -21, -11, 11)
+    SetTextureColor(matte, colors.surface)
+
+    if aceFrame.content then
+        local contentMatte = EnsureTexture(aceFrame.content, "StyleBoundContentMatte", "BACKGROUND")
+        AnchorInset(contentMatte, aceFrame.content, 0, 0, 0, 0)
+        SetTextureColor(contentMatte, colors.surface)
+    end
+
     if aceFrame.titletext and aceFrame.titletext.SetTextColor then
         aceFrame.titletext:SetTextColor(colors.text[1], colors.text[2], colors.text[3])
     end
@@ -61,12 +79,19 @@ end
 function UI:StyleTabGroup(tabGroup)
     if not tabGroup then return end
 
+    local colors = self.Colors
     local border = tabGroup.border
     if border and border.SetBackdropColor then
-        border:SetBackdropColor(0, 0, 0, 0)
+        border:SetBackdropColor(colors.surface[1], colors.surface[2], colors.surface[3], colors.surface[4])
     end
     if border and border.SetBackdropBorderColor then
-        border:SetBackdropBorderColor(0, 0, 0, 0)
+        border:SetBackdropBorderColor(colors.goldDim[1], colors.goldDim[2], colors.goldDim[3], 0.85)
+    end
+
+    if tabGroup.content then
+        local matte = EnsureTexture(tabGroup.content, "StyleBoundTabContentMatte", "BACKGROUND")
+        AnchorInset(matte, tabGroup.content, 0, 0, 0, 0)
+        SetTextureColor(matte, colors.surface)
     end
 end
 
@@ -138,20 +163,56 @@ function UI:StylePanel(widget, variant)
     local topColor = transparent
     local bottomColor = transparent
     local sideColor = transparent
-    if variant == "subtle" then
+    if variant == "pane" then
+        bgColor = { 0.022, 0.021, 0.019, 1.00 }
+        borderColor = colors.border
+        topColor = colors.goldDim
+        bottomColor = colors.border
+        sideColor = colors.border
+    elseif variant == "subtle" then
         bgColor = colors.panelAlt
     elseif variant == "gold" then
-        bgColor = { 0.052, 0.045, 0.035, 0.90 }
+        bgColor = { 0.060, 0.052, 0.040, 1.00 }
     elseif variant == "card" then
-        bgColor = colors.panelAlt
+        bgColor = { 0.046, 0.043, 0.038, 1.00 }
+        topColor = colors.border
+        bottomColor = colors.border
+        sideColor = colors.border
     elseif variant == "cardGold" then
-        bgColor = { 0.052, 0.045, 0.035, 0.96 }
+        bgColor = { 0.060, 0.052, 0.040, 1.00 }
+        topColor = colors.goldDim
+        bottomColor = colors.goldDim
+        sideColor = colors.goldDim
+    elseif variant == "cardWarning" then
+        bgColor = { 0.070, 0.040, 0.026, 1.00 }
+        topColor = { 0.430, 0.200, 0.080, 1.00 }
+        bottomColor = { 0.430, 0.200, 0.080, 1.00 }
+        sideColor = { 0.430, 0.200, 0.080, 1.00 }
     elseif variant == "titleStrip" then
-        bgColor = { 0.070, 0.066, 0.058, 0.98 }
+        bgColor = { 0.090, 0.085, 0.076, 1.00 }
+        bottomColor = { 0.120, 0.108, 0.086, 1.00 }
     elseif variant == "titleStripGold" then
-        bgColor = { 0.085, 0.071, 0.043, 0.98 }
+        bgColor = { 0.110, 0.090, 0.052, 1.00 }
+        bottomColor = colors.goldDim
+    elseif variant == "titleStripWarning" then
+        bgColor = { 0.130, 0.070, 0.034, 1.00 }
+        bottomColor = { 0.560, 0.260, 0.090, 1.00 }
+    elseif variant == "actionStrip" then
+        bgColor = { 0.046, 0.043, 0.038, 1.00 }
+    elseif variant == "actionStripGold" then
+        bgColor = { 0.060, 0.052, 0.040, 1.00 }
+    elseif variant == "actionStripWarning" then
+        bgColor = { 0.070, 0.040, 0.026, 1.00 }
+    elseif variant == "folderRow" then
+        bgColor = { 0.042, 0.040, 0.036, 1.00 }
+        bottomColor = colors.border
+    elseif variant == "folderSelected" then
+        bgColor = { 0.095, 0.082, 0.052, 1.00 }
+        topColor = colors.goldDim
+        bottomColor = colors.goldDim
+        sideColor = colors.goldDim
     elseif variant == "selected" then
-        bgColor = { 0.105, 0.092, 0.061, 0.98 }
+        bgColor = { 0.120, 0.102, 0.068, 1.00 }
         borderColor = colors.gold
         topColor = borderColor
         bottomColor = borderColor
