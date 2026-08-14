@@ -1,4 +1,4 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: StyleBound
 ## Notes: Export and import transmog outfits with StyleBound.gg
 ## Author: StyleBound
