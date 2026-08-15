@@ -215,6 +215,14 @@ function Housing:AttachDashboardButton(details)
     button:SetScript("OnLeave", GameTooltip_Hide)
 
     details.StyleBoundExportButton = button
+    details.StyleBoundExportElapsed = 0
+    details:HookScript("OnUpdate", function(frame, elapsed)
+        frame.StyleBoundExportElapsed = frame.StyleBoundExportElapsed + elapsed
+        if frame.StyleBoundExportElapsed >= 0.2 then
+            frame.StyleBoundExportElapsed = 0
+            self:UpdateDashboardButton(frame)
+        end
+    end)
     self:UpdateDashboardButton(details)
 end
 
@@ -277,6 +285,48 @@ function Housing:StartDashboardWatcher()
             self.dashboardWatcher = nil
         end
     end)
+end
+
+function Housing:PrintDashboardDebug()
+    local dashboardLoaded = C_AddOns and C_AddOns.IsAddOnLoaded
+        and C_AddOns.IsAddOnLoaded("Blizzard_HousingDashboard")
+    StyleBound:Print("Housing debug: module=" .. tostring(self:IsEnabled())
+        .. " dashboardAddon=" .. tostring(dashboardLoaded)
+        .. " mixin=" .. type(HousingDashboardBlueprintDetailsMixin)
+        .. " hooked=" .. tostring(self.dashboardHooked))
+
+    self:InstallDashboardHook()
+    local dashboard = HousingDashboardFrame
+    local collection = dashboard and dashboard.CollectionContent
+    local details = collection and collection.BlueprintDetails
+    StyleBound:Print("Housing debug: frame=" .. tostring(dashboard ~= nil)
+        .. " collection=" .. tostring(collection ~= nil)
+        .. " details=" .. tostring(details ~= nil))
+
+    if not details then
+        StyleBound:Print("Housing debug: open Housing Dashboard > Blueprints, then run this command again.")
+        return
+    end
+
+    self:AttachDashboardButton(details)
+    self:UpdateDashboardButton(details)
+
+    local summary = details.ContentSummary
+    local button = details.StyleBoundExportButton
+    local blueprintInfo = details.blueprintInfo
+    local contentInfo = summary and summary.blueprintContentInfo
+    StyleBound:Print("Housing debug: blueprint=" .. tostring(blueprintInfo ~= nil)
+        .. " content=" .. tostring(contentInfo ~= nil)
+        .. " listButton=" .. tostring(summary and summary.ContentsListButton ~= nil)
+        .. " exportButton=" .. tostring(button ~= nil))
+
+    if button then
+        local width, height = button:GetSize()
+        local x, y = button:GetCenter()
+        StyleBound:Print(("Housing debug: export shown=%s visible=%s enabled=%s size=%.0fx%.0f center=%s,%s level=%s")
+            :format(tostring(button:IsShown()), tostring(button:IsVisible()), tostring(button:IsEnabled()),
+                width or 0, height or 0, tostring(x), tostring(y), tostring(button:GetFrameLevel())))
+    end
 end
 
 function Housing:ADDON_LOADED(_, addonName)
