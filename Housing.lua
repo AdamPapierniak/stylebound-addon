@@ -271,10 +271,8 @@ end
 function Housing:StartDashboardWatcher()
     if self:TryAttachDashboardFrame() or self.dashboardWatcher then return end
 
-    local attempts = 0
     self.dashboardWatcher = C_Timer.NewTicker(1, function(ticker)
-        attempts = attempts + 1
-        if self:TryAttachDashboardFrame() or attempts >= 30 then
+        if self:TryAttachDashboardFrame() then
             ticker:Cancel()
             self.dashboardWatcher = nil
         end
