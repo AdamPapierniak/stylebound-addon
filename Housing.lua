@@ -65,6 +65,10 @@ end
 function Housing:OnEnable()
     self:RegisterEvent("HOUSING_BLUEPRINT_CONTENTS_RECEIVED")
     self:RegisterEvent("HOUSING_BLUEPRINT_CONTENTS_FAILURE")
+
+    if not self:InstallDashboardHook() then
+        self:RegisterEvent("ADDON_LOADED")
+    end
 end
 
 function Housing:EncodeManifest(manifest)
@@ -108,7 +112,19 @@ function Housing:BuildManifest(contentInfo)
     }
 end
 
-function Housing:RequestManifest(code)
+function Housing:ShowManifest(contentInfo)
+    local manifest = self:BuildManifest(contentInfo)
+    if not manifest.blueprintType then
+        StyleBound:Print("Blueprint loaded, but its type was not recognized by this addon version.")
+        return false
+    end
+
+    local encoded = self:EncodeManifest(manifest)
+    StyleBound:GetModule("HousingDialog"):ShowManifest(manifest, encoded)
+    return true
+end
+
+function Housing:RequestManifest(code, targetHouseGUID)
     code = NormalizeCode(code)
     if code == "" then
         StyleBound:Print("Usage: /sb housing <blueprint-code>")
@@ -124,25 +140,121 @@ function Housing:RequestManifest(code)
     end
 
     self.pendingCode = code
-    C_HousingBlueprint.RequestBlueprintContentsForContext(code)
+    C_HousingBlueprint.RequestBlueprintContentsForContext(code, targetHouseGUID)
     StyleBound:Print("Reading blueprint contents from WoW...")
 end
 
 function Housing:HOUSING_BLUEPRINT_CONTENTS_RECEIVED(_, contentInfo)
     if not contentInfo or contentInfo.shareCode ~= self.pendingCode then return end
     self.pendingCode = nil
-
-    local manifest = self:BuildManifest(contentInfo)
-    if not manifest.blueprintType then
-        StyleBound:Print("Blueprint loaded, but its type was not recognized by this addon version.")
-        return
-    end
-    local encoded = self:EncodeManifest(manifest)
-    StyleBound:GetModule("HousingDialog"):ShowManifest(manifest, encoded)
+    self:ShowManifest(contentInfo)
 end
 
 function Housing:HOUSING_BLUEPRINT_CONTENTS_FAILURE(_, blueprintShareCode, result)
     if blueprintShareCode ~= self.pendingCode then return end
     self.pendingCode = nil
     StyleBound:Print("WoW could not load that blueprint code (result " .. tostring(result) .. ").")
+end
+
+function Housing:UpdateDashboardButton(details)
+    local button = details and details.StyleBoundExportButton
+    if not button then return end
+
+    local blueprintInfo = details.blueprintInfo
+    local contentInfo = details.ContentSummary and details.ContentSummary.blueprintContentInfo
+    local hasCurrentContent = blueprintInfo
+        and contentInfo
+        and contentInfo.shareCode == blueprintInfo.shareCode
+
+    button:SetShown(blueprintInfo ~= nil)
+    button:SetEnabled(hasCurrentContent and true or false)
+    if details.ContentSummary and details.ContentSummary.MarkDirty then
+        details.ContentSummary:MarkDirty()
+    end
+end
+
+function Housing:AttachDashboardButton(details)
+    if not details or details.StyleBoundExportButton or not details.ContentSummary then
+        return
+    end
+
+    local summary = details.ContentSummary
+    local button = CreateFrame("Button", nil, summary, "UIPanelDynamicResizeButtonTemplate")
+    button:SetHeight(28)
+    button:SetMotionScriptsWhileDisabled(true)
+    button:SetText("Export to StyleBound")
+    button.layoutIndex = 4
+    button.align = "center"
+    button:SetScript("OnClick", function()
+        local blueprintInfo = details.blueprintInfo
+        local contentInfo = summary.blueprintContentInfo
+        if not blueprintInfo or not contentInfo or contentInfo.shareCode ~= blueprintInfo.shareCode then
+            StyleBound:Print("That blueprint's item list is still loading.")
+            return
+        end
+
+        PlaySound(SOUNDKIT.HOUSING_BLUEPRINTS_BUTTONS)
+        self:ShowManifest(contentInfo)
+    end)
+    button:SetScript("OnEnter", function()
+        GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+        if button:IsEnabled() then
+            GameTooltip:SetText("Export to StyleBound")
+            GameTooltip:AddLine("Create a copyable StyleBound manifest from this blueprint and its item list.", 1, 1, 1, true)
+        else
+            GameTooltip:SetText("Blueprint contents are loading")
+            GameTooltip:AddLine("The export will become available when WoW finishes loading the item list.", 1, 1, 1, true)
+        end
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", GameTooltip_Hide)
+
+    details.StyleBoundExportButton = button
+    self:UpdateDashboardButton(details)
+end
+
+function Housing:InstallDashboardHook()
+    if self.dashboardHooked then return true end
+    if type(HousingDashboardBlueprintDetailsMixin) ~= "table" then return false end
+
+    self.dashboardHooked = true
+    hooksecurefunc(HousingDashboardBlueprintDetailsMixin, "OnLoad", function(details)
+        self:AttachDashboardButton(details)
+    end)
+    hooksecurefunc(HousingDashboardBlueprintDetailsMixin, "ShowBlueprint", function(details)
+        self:AttachDashboardButton(details)
+        self:UpdateDashboardButton(details)
+    end)
+    hooksecurefunc(HousingDashboardBlueprintDetailsMixin, "ClearData", function(details)
+        self:UpdateDashboardButton(details)
+    end)
+
+    if type(HousingBlueprintContentSummaryMixin) == "table" then
+        hooksecurefunc(HousingBlueprintContentSummaryMixin, "OnBlueprintContentsReceived", function(summary)
+            local details = summary:GetParent()
+            if details and details.StyleBoundExportButton then
+                self:UpdateDashboardButton(details)
+            end
+        end)
+        hooksecurefunc(HousingBlueprintContentSummaryMixin, "OnContentRequestFailure", function(summary)
+            local details = summary:GetParent()
+            if details and details.StyleBoundExportButton then
+                self:UpdateDashboardButton(details)
+            end
+        end)
+    end
+
+    local dashboard = HousingDashboardFrame
+    local details = dashboard and dashboard.CollectionContent and dashboard.CollectionContent.BlueprintDetails
+    if details then
+        self:AttachDashboardButton(details)
+    end
+
+    return true
+end
+
+function Housing:ADDON_LOADED(_, addonName)
+    if addonName == "Blizzard_HousingDashboard" and self:InstallDashboardHook() then
+        self:UnregisterEvent("ADDON_LOADED")
+    end
 end
