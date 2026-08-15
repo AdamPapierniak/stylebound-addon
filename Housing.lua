@@ -14,7 +14,7 @@ local CONTENT_NAMES = {
 }
 
 local function NormalizeCode(code)
-    return (code or ""):gsub("%s+", "")
+    return tostring(code or ""):gsub("%s+", "")
 end
 
 local function BlueprintTypeName(value)

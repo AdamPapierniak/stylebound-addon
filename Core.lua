@@ -296,7 +296,8 @@ function StyleBound:SlashCommand(input)
             self:GetModule("MainPanel"):SelectTab("export")
         end
     elseif cmd == "housing" then
-        local _, code = self:GetArgs(input, 1)
+        local _, nextPosition = self:GetArgs(input, 1)
+        local code = self:GetArgs(input, 1, nextPosition)
         self:GetModule("Housing"):RequestManifest(code)
     elseif cmd == "selftest" then
         self:GetModule("Export"):SelfTest()
