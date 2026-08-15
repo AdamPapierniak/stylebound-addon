@@ -5,6 +5,7 @@ StyleBound is a World of Warcraft addon for moving transmog outfits between the 
 ## Features
 
 - Export your current transmog as a compact StyleBound string for the site.
+- Read a WoW housing blueprint code with `/sb housing <code>` and export its public furnishing requirements for the site.
 - Import a StyleBound string in-game to preview an outfit, check what you own, and save it to your library.
 - Copy a nearby targeted player's visible transmog with `/sb copy`.
 - Save, search, organize, preview, share, rename, delete, and promote outfits into Blizzard custom sets.

@@ -280,11 +280,12 @@ function StyleBound:SlashCommand(input)
         self:Print("Unknown command: " .. cmd .. ". Type /sb help")
         return
     elseif cmd == "help" then
-        self:Print("Commands: /sb | /sb screenshot | /sb autoshoot | /sb copy")
+        self:Print("Commands: /sb | /sb screenshot | /sb autoshoot | /sb copy | /sb housing <code>")
         self:Print("  /sb opens the StyleBound panel.")
         self:Print("  /sb screenshot starts a clean manual screenshot session.")
         self:Print("  /sb autoshoot captures a quick three-angle screenshot set.")
         self:Print("  /sb copy copies your target's transmog. Put it in a macro for quick use.")
+        self:Print("  /sb housing <code> reads a housing blueprint for stylebound.gg.")
         if self:IsDebugMode() then
             self:Print("Debug: /sb export | /sb import <string> | /sb selftest | /sb dbcheck | /sb probe[1-8]")
         end
@@ -294,6 +295,9 @@ function StyleBound:SlashCommand(input)
         else
             self:GetModule("MainPanel"):SelectTab("export")
         end
+    elseif cmd == "housing" then
+        local _, code = self:GetArgs(input, 1)
+        self:GetModule("Housing"):RequestManifest(code)
     elseif cmd == "selftest" then
         self:GetModule("Export"):SelfTest()
     elseif cmd == "import" then

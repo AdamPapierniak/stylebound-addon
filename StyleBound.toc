@@ -21,6 +21,7 @@ Core.lua
 
 Export.lua
 Import.lua
+Housing.lua
 OutfitLibrary.lua
 Screenshot.lua
 Selfie.lua
@@ -28,4 +29,5 @@ Selfie.lua
 UI\Styles.lua
 UI\MainPanel.lua
 UI\ImportDialog.lua
+UI\HousingDialog.lua
 UI\OutfitBrowser.lua
