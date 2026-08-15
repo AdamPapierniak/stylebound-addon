@@ -65,6 +65,7 @@ end
 function Housing:OnEnable()
     self:RegisterEvent("HOUSING_BLUEPRINT_CONTENTS_RECEIVED")
     self:RegisterEvent("HOUSING_BLUEPRINT_CONTENTS_FAILURE")
+    self:RegisterEvent("PLAYER_HOUSE_LIST_UPDATED")
 
     if not self:InstallDashboardHook() then
         self:RegisterEvent("ADDON_LOADED")
@@ -271,9 +272,37 @@ function Housing:TryAttachDashboardFrame()
     local details = dashboard and dashboard.CollectionContent and dashboard.CollectionContent.BlueprintDetails
     if not details then return false end
 
+    self:SyncDashboardHouseList(dashboard.HouseDropdown and dashboard.HouseDropdown.playerHouseList)
     self:AttachDashboardButton(details)
     self:UpdateDashboardButton(details)
     return details.StyleBoundExportButton ~= nil
+end
+
+function Housing:SyncDashboardHouseList(houseInfoList)
+    if not houseInfoList then return false end
+
+    local dashboard = HousingDashboardFrame
+    local houseInfo = dashboard and dashboard.HouseInfoContent
+    local content = houseInfo and houseInfo.ContentFrame
+    if not content then return false end
+
+    -- Blizzard can emit HouseSelected without rebroadcasting an unchanged house
+    -- list, leaving these child panels without the list their handlers expect.
+    local initiatives = content.InitiativesFrame
+    if initiatives and not initiatives.playerHouseList then
+        initiatives.playerHouseList = houseInfoList
+    end
+
+    local upgrades = content.HouseUpgradeFrame
+    if upgrades and not upgrades.houseList then
+        upgrades.houseList = houseInfoList
+    end
+
+    return true
+end
+
+function Housing:PLAYER_HOUSE_LIST_UPDATED(_, houseInfoList)
+    self:SyncDashboardHouseList(houseInfoList)
 end
 
 function Housing:StartDashboardWatcher()
@@ -308,6 +337,7 @@ function Housing:PrintDashboardDebug()
         return
     end
 
+    self:SyncDashboardHouseList(dashboard.HouseDropdown and dashboard.HouseDropdown.playerHouseList)
     self:AttachDashboardButton(details)
     self:UpdateDashboardButton(details)
 
@@ -315,10 +345,16 @@ function Housing:PrintDashboardDebug()
     local button = details.StyleBoundExportButton
     local blueprintInfo = details.blueprintInfo
     local contentInfo = summary and summary.blueprintContentInfo
+    local houseInfoContent = dashboard.HouseInfoContent and dashboard.HouseInfoContent.ContentFrame
+    local initiatives = houseInfoContent and houseInfoContent.InitiativesFrame
+    local upgrades = houseInfoContent and houseInfoContent.HouseUpgradeFrame
     StyleBound:Print("Housing debug: blueprint=" .. tostring(blueprintInfo ~= nil)
         .. " content=" .. tostring(contentInfo ~= nil)
         .. " listButton=" .. tostring(summary and summary.ContentsListButton ~= nil)
         .. " exportButton=" .. tostring(button ~= nil))
+    StyleBound:Print("Housing debug: dropdownList=" .. tostring(dashboard.HouseDropdown and dashboard.HouseDropdown.playerHouseList ~= nil)
+        .. " initiativesList=" .. tostring(initiatives and initiatives.playerHouseList ~= nil)
+        .. " upgradesList=" .. tostring(upgrades and upgrades.houseList ~= nil))
 
     if button then
         local width, height = button:GetSize()
