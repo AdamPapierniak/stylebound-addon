@@ -69,6 +69,14 @@ function Housing:OnEnable()
     if not self:InstallDashboardHook() then
         self:RegisterEvent("ADDON_LOADED")
     end
+    self:StartDashboardWatcher()
+end
+
+function Housing:OnDisable()
+    if self.dashboardWatcher then
+        self.dashboardWatcher:Cancel()
+        self.dashboardWatcher = nil
+    end
 end
 
 function Housing:EncodeManifest(manifest)
@@ -168,9 +176,6 @@ function Housing:UpdateDashboardButton(details)
 
     button:SetShown(blueprintInfo ~= nil)
     button:SetEnabled(hasCurrentContent and true or false)
-    if details.ContentSummary and details.ContentSummary.MarkDirty then
-        details.ContentSummary:MarkDirty()
-    end
 end
 
 function Housing:AttachDashboardButton(details)
@@ -179,12 +184,12 @@ function Housing:AttachDashboardButton(details)
     end
 
     local summary = details.ContentSummary
-    local button = CreateFrame("Button", nil, summary, "UIPanelDynamicResizeButtonTemplate")
-    button:SetHeight(28)
+    local button = CreateFrame("Button", nil, details, "UIPanelButtonTemplate")
+    button:SetSize(180, 28)
+    button:SetPoint("TOP", summary.ContentsListButton, "BOTTOM", 0, -8)
+    button:SetFrameLevel(summary:GetFrameLevel() + 5)
     button:SetMotionScriptsWhileDisabled(true)
     button:SetText("Export to StyleBound")
-    button.layoutIndex = 4
-    button.align = "center"
     button:SetScript("OnClick", function()
         local blueprintInfo = details.blueprintInfo
         local contentInfo = summary.blueprintContentInfo
@@ -225,6 +230,10 @@ function Housing:InstallDashboardHook()
         self:AttachDashboardButton(details)
         self:UpdateDashboardButton(details)
     end)
+    hooksecurefunc(HousingDashboardBlueprintDetailsMixin, "OnShow", function(details)
+        self:AttachDashboardButton(details)
+        self:UpdateDashboardButton(details)
+    end)
     hooksecurefunc(HousingDashboardBlueprintDetailsMixin, "ClearData", function(details)
         self:UpdateDashboardButton(details)
     end)
@@ -244,17 +253,37 @@ function Housing:InstallDashboardHook()
         end)
     end
 
-    local dashboard = HousingDashboardFrame
-    local details = dashboard and dashboard.CollectionContent and dashboard.CollectionContent.BlueprintDetails
-    if details then
-        self:AttachDashboardButton(details)
-    end
+    self:TryAttachDashboardFrame()
 
     return true
+end
+
+function Housing:TryAttachDashboardFrame()
+    local dashboard = HousingDashboardFrame
+    local details = dashboard and dashboard.CollectionContent and dashboard.CollectionContent.BlueprintDetails
+    if not details then return false end
+
+    self:AttachDashboardButton(details)
+    self:UpdateDashboardButton(details)
+    return details.StyleBoundExportButton ~= nil
+end
+
+function Housing:StartDashboardWatcher()
+    if self:TryAttachDashboardFrame() or self.dashboardWatcher then return end
+
+    local attempts = 0
+    self.dashboardWatcher = C_Timer.NewTicker(1, function(ticker)
+        attempts = attempts + 1
+        if self:TryAttachDashboardFrame() or attempts >= 30 then
+            ticker:Cancel()
+            self.dashboardWatcher = nil
+        end
+    end)
 end
 
 function Housing:ADDON_LOADED(_, addonName)
     if addonName == "Blizzard_HousingDashboard" and self:InstallDashboardHook() then
         self:UnregisterEvent("ADDON_LOADED")
+        self:TryAttachDashboardFrame()
     end
 end
