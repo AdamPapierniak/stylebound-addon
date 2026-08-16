@@ -1,6 +1,6 @@
 ## Interface: 120100
 ## Title: StyleBound
-## Notes: Export and import transmog outfits with StyleBound.gg
+## Notes: Share transmog outfits and housing blueprints with StyleBound.gg
 ## Author: StyleBound
 ## Version: @project-version@
 ## IconTexture: Interface\AddOns\StyleBound\Media\stylebound-icon.tga

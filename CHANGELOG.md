@@ -1,3 +1,10 @@
+## [0.1.7] - 2026-08-15
+
+- Added an **Export to StyleBound** button to the Housing Dashboard blueprint details panel.
+- Added housing manifests with the blueprint code, furnishing requirements, catalog details, sources, placement costs, and budget totals for housing submissions on stylebound.gg.
+- Added `/sb housing <code>` as a fallback housing blueprint export command.
+- Fixed dashboard attachment timing, blueprint selection refreshes, and house-list initialization issues found during in-game testing.
+
 ## [0.1.0] - Unreleased
 
 - Added the main StyleBound panel with Export, Import, Outfits, and Screenshot tabs.
